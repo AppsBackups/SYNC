@@ -2,6 +2,15 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const syncRoutes = require('./routes/syncRoute');
+const pool = require("./config/db");
+
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('❌ Error executing query:', err);
+  } else {
+    console.log('✅ Connected to DB:', res.rows);
+  }
+});
 
 const app = express();
 
