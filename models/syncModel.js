@@ -6,7 +6,7 @@ const getRecordsSince = async (table, timestamp, excludeIds = []) => {
     if (!timestamp) throw new Error("Timestamp is required");
 
     const params = [timestamp];
-    let query = `SELECT * FROM ${table} WHERE last_modified > $1`;
+    let query = `SELECT * FROM "${table}" WHERE "last_modified" > $1`;
 
     if (excludeIds.length > 0) {
       if (!Array.isArray(excludeIds)) {
@@ -17,15 +17,14 @@ const getRecordsSince = async (table, timestamp, excludeIds = []) => {
       params.push(...excludeIds);
     }
 
-    query += " ORDER BY last_modified ASC"; 
+    query += " ORDER BY last_modified ASC";
     const { rows } = await pool.query(query, params);
     return rows;
   } catch (error) {
-    logError("Error in getRecordsSince", { table, error });
+    console.error("❌ Error in getRecordsSince:", { table, error }); // fixed
     throw error;
   }
 };
-
 
 const upsertRecord = async (table, record) => {
   try {
@@ -42,7 +41,7 @@ const upsertRecord = async (table, record) => {
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
 
     const updates = columns
-      .filter(col => col !== "global_id") 
+      .filter(col => col !== "global_id")
       .map(col => `${col} = EXCLUDED.${col}`)
       .join(", ");
 
@@ -56,9 +55,9 @@ const upsertRecord = async (table, record) => {
     `;
 
     const { rows } = await pool.query(query, values);
-    return rows[0]; 
+    return rows[0];
   } catch (error) {
-    logError("Error in upsertRecord", { table, record, error });
+    console.error("❌ Error in upsertRecord:", { table, record, error }); // fixed
     throw error;
   }
 };
