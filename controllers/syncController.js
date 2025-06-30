@@ -1,7 +1,7 @@
 const { upsertRecord, getRecordsSince } = require("../models/syncModel");
 
 const tableList = [
-  "User", "Item", "ItemGroup", "Customer ", "CustomerGroup",
+  "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
   "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules"
 ];
 
