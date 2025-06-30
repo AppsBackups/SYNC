@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 
+// Get records modified after a given timestamp
 const getRecordsSince = async (table, timestamp, excludeIds = []) => {
   try {
     if (!table) throw new Error("Table name is required");
@@ -13,19 +14,20 @@ const getRecordsSince = async (table, timestamp, excludeIds = []) => {
         throw new Error("excludeIds must be an array");
       }
       const idParams = excludeIds.map((_, i) => `$${i + 2}`).join(",");
-      query += ` AND global_id NOT IN (${idParams})`;
+      query += ` AND "global_id" NOT IN (${idParams})`;
       params.push(...excludeIds);
     }
 
-    query += " ORDER BY last_modified ASC";
+    query += ' ORDER BY "last_modified" ASC';
     const { rows } = await pool.query(query, params);
     return rows;
   } catch (error) {
-    console.error("❌ Error in getRecordsSince:", { table, error }); // fixed
+    console.error("❌ Error in getRecordsSince:", { table, error });
     throw error;
   }
 };
 
+// Insert or update a record using UPSERT (based on global_id)
 const upsertRecord = async (table, record) => {
   try {
     if (!table) throw new Error("Table name is required");
@@ -39,25 +41,26 @@ const upsertRecord = async (table, record) => {
     const columns = Object.keys(record);
     const values = Object.values(record);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
+    const quotedColumns = columns.map(col => `"${col}"`).join(",");
 
     const updates = columns
       .filter(col => col !== "global_id")
-      .map(col => `${col} = EXCLUDED.${col}`)
+      .map(col => `"${col}" = EXCLUDED."${col}"`)
       .join(", ");
 
     const query = `
-      INSERT INTO ${table} (${columns.join(",")})
+      INSERT INTO "${table}" (${quotedColumns})
       VALUES (${placeholders})
-      ON CONFLICT (global_id)
+      ON CONFLICT ("global_id")
       DO UPDATE SET ${updates}
-      WHERE ${table}.last_modified <= EXCLUDED.last_modified
+      WHERE "${table}"."last_modified" <= EXCLUDED."last_modified"
       RETURNING *;
     `;
 
     const { rows } = await pool.query(query, values);
     return rows[0];
   } catch (error) {
-    console.error("❌ Error in upsertRecord:", { table, record, error }); // fixed
+    console.error("❌ Error in upsertRecord:", { table, record, error });
     throw error;
   }
 };
