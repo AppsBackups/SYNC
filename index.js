@@ -2,15 +2,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const syncRoutes = require('./routes/syncRoute');
+const transactionRoutes = require('./routes/transactionRoutes');
 const pool = require("./config/db");
 
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Error executing query:', err);
-  } else {
-    console.log('✅ Connected to DB:', res.rows);
-  }
-});
+
 
 const app = express();
 
@@ -25,7 +20,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-app.use('/api', syncRoutes);
+app.use('/api', syncRoutes ,transactionRoutes);
 
 
 app.use((err, req, res, next) => {
