@@ -50,23 +50,43 @@ exports.registerNewDevice = async (req, res) => {
       return res.status(403).json({ error: 'Tenant mismatch' });
     }
 
+    if (original.device_id === new_device_id) {
+      return res.status(400).json({ error: 'Device cannot pair with itself' });
+    }
+
+    // Check for existing pair in either direction
+    const checkExisting = await pool.query(
+      `SELECT * FROM device_pairs 
+       WHERE (device_id_1 = $1 AND device_id_2 = $2) 
+          OR (device_id_1 = $2 AND device_id_2 = $1)`,
+      [original.device_id, new_device_id]
+    );
+
+    if (checkExisting.rows.length > 0) {
+      return res.status(400).json({ error: 'Devices are already paired' });
+    }
+
+    // Insert the new device into paired_devices
     await pool.query(
       `INSERT INTO paired_devices (token, device_id, device_name, tenant_id, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
       [uuidv4(), new_device_id, new_device_name, new_device_tenant, original.expires_at]
     );
 
+    // Insert into device_pairs
     await pool.query(
-        `INSERT INTO device_pairs (device_id_1, device_id_2) VALUES ($1, $2)`,
-        [original.device_id, new_device_id]
+      `INSERT INTO device_pairs (device_id_1, device_id_2) VALUES ($1, $2)`,
+      [original.device_id, new_device_id]
     );
-    
-    return res.status(200).json({ message: 'New device registered successfully' });
+
+    return res.status(200).json({ message: 'New device registered and paired successfully' });
+
   } catch (err) {
     console.error('Error registering new device:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
 
 
 // GET /api/pairedDevices/:deviceId
