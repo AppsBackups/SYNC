@@ -3,6 +3,9 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const syncRoutes = require('./routes/syncRoute');
 const transactionRoutes = require('./routes/transactionRoutes');
+const deviceRoutes = require('./routes/deviceRoutes');
+
+
 const pool = require("./config/db");
 
 
@@ -21,6 +24,7 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 app.use('/api', syncRoutes ,transactionRoutes);
+app.use('/api', deviceRoutes);
 
 
 app.use((err, req, res, next) => {
