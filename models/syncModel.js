@@ -10,9 +10,7 @@ const getRecordsSince = async (table, timestamp, excludeIds = []) => {
     let query = `SELECT * FROM "${table}" WHERE "last_modified" > $1`;
 
     if (excludeIds.length > 0) {
-      if (!Array.isArray(excludeIds)) {
-        throw new Error("excludeIds must be an array");
-      }
+      if (!Array.isArray(excludeIds)) throw new Error("excludeIds must be an array");
       const idParams = excludeIds.map((_, i) => `$${i + 2}`).join(",");
       query += ` AND "global_id" NOT IN (${idParams})`;
       params.push(...excludeIds);
@@ -31,12 +29,8 @@ const getRecordsSince = async (table, timestamp, excludeIds = []) => {
 const upsertRecord = async (table, record) => {
   try {
     if (!table) throw new Error("Table name is required");
-    if (!record || typeof record !== "object") {
-      throw new Error("Record must be an object");
-    }
-    if (!record.global_id) {
-      throw new Error("Record must have a global_id property");
-    }
+    if (!record || typeof record !== "object") throw new Error("Record must be an object");
+    if (!record.global_id) throw new Error("Record must have a global_id property");
 
     const columns = Object.keys(record);
     const values = Object.values(record);
@@ -65,7 +59,21 @@ const upsertRecord = async (table, record) => {
   }
 };
 
+// Log each sync activity
+const logSync = async (deviceId, direction, tableName, recordIds = []) => {
+  try {
+    const query = `
+      INSERT INTO sync_logs (device_id, direction, table_name, record_ids, synced_at)
+      VALUES ($1, $2, $3, $4, NOW())
+    `;
+    await pool.query(query, [deviceId, direction, tableName, recordIds]);
+  } catch (error) {
+    console.error("❌ Error in logSync:", { deviceId, direction, tableName, error });
+  }
+};
+
 module.exports = {
   getRecordsSince,
-  upsertRecord
+  upsertRecord,
+  logSync,
 };
