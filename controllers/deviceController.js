@@ -90,21 +90,34 @@ exports.registerNewDevice = async (req, res) => {
 
 
 // GET /api/pairedDevices/:deviceId
+
+// GET /api/pairedDevices/:deviceId
 exports.getPairedDevices = async (req, res) => {
   const { deviceId } = req.params;
+
+  if (!deviceId) {
+    return res.status(400).json({ error: 'Device ID is required' });
+  }
 
   try {
     const result = await pool.query(`
       SELECT 
-        pd.device_id,
-        pd.device_name,
-        pd.tenant_id,
-        pd.expires_at
+        CASE 
+          WHEN dp.device_id_1 = $1 THEN pd2.device_id
+          ELSE pd1.device_id
+        END AS device_id,
+        CASE 
+          WHEN dp.device_id_1 = $1 THEN pd2.device_name
+          ELSE pd1.device_name
+        END AS device_name,
+        CASE 
+          WHEN dp.device_id_1 = $1 THEN pd2.tenant_id
+          ELSE pd1.tenant_id
+        END AS tenant_id
       FROM device_pairs dp
-      JOIN paired_devices pd
-        ON (pd.device_id = dp.device_id_1 AND dp.device_id_2 = $1)
-        OR (pd.device_id = dp.device_id_2 AND dp.device_id_1 = $1)
-      WHERE pd.device_id != $1
+      LEFT JOIN paired_devices pd1 ON pd1.device_id = dp.device_id_1
+      LEFT JOIN paired_devices pd2 ON pd2.device_id = dp.device_id_2
+      WHERE dp.device_id_1 = $1 OR dp.device_id_2 = $1
     `, [deviceId]);
 
     return res.status(200).json({ pairedDevices: result.rows });
