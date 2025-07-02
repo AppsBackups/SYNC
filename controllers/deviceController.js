@@ -10,7 +10,7 @@ exports.getQRCode = async (req, res) => {
   }
 
   const token = uuidv4();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
   try {
     await pool.query(
@@ -54,29 +54,33 @@ exports.registerNewDevice = async (req, res) => {
       return res.status(400).json({ error: 'Device cannot pair with itself' });
     }
 
-    // Check for existing pair in either direction
+    const device1 = original.device_id;
+    const device2 = new_device_id;
+
+    const deviceId1 = device1 < device2 ? device1 : device2;
+    const deviceId2 = device1 < device2 ? device2 : device1;
+
+    // Check if already paired
     const checkExisting = await pool.query(
-      `SELECT * FROM device_pairs 
-       WHERE (device_id_1 = $1 AND device_id_2 = $2) 
-          OR (device_id_1 = $2 AND device_id_2 = $1)`,
-      [original.device_id, new_device_id]
+      `SELECT * FROM device_pairs WHERE device_id_1 = $1 AND device_id_2 = $2`,
+      [deviceId1, deviceId2]
     );
 
     if (checkExisting.rows.length > 0) {
       return res.status(400).json({ error: 'Devices are already paired' });
     }
 
-    // Insert the new device into paired_devices
+    // Save new device
     await pool.query(
       `INSERT INTO paired_devices (token, device_id, device_name, tenant_id, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
       [uuidv4(), new_device_id, new_device_name, new_device_tenant, original.expires_at]
     );
 
-    // Insert into device_pairs
+    // Save pairing (unique direction)
     await pool.query(
       `INSERT INTO device_pairs (device_id_1, device_id_2) VALUES ($1, $2)`,
-      [original.device_id, new_device_id]
+      [deviceId1, deviceId2]
     );
 
     return res.status(200).json({ message: 'New device registered and paired successfully' });
@@ -86,10 +90,6 @@ exports.registerNewDevice = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
-
-
-
-// GET /api/pairedDevices/:deviceId
 
 // GET /api/pairedDevices/:deviceId
 exports.getPairedDevices = async (req, res) => {
@@ -123,6 +123,39 @@ exports.getPairedDevices = async (req, res) => {
     return res.status(200).json({ pairedDevices: result.rows });
   } catch (err) {
     console.error('Error fetching paired devices:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+// DELETE /api/unpairDevices
+exports.unpairDevices = async (req, res) => {
+  const { device_id_1, device_id_2 } = req.body;
+
+  if (!device_id_1 || !device_id_2) {
+    return res.status(400).json({ error: 'Both device IDs are required' });
+  }
+
+  if (device_id_1 === device_id_2) {
+    return res.status(400).json({ error: 'Cannot unpair the same device' });
+  }
+
+  const id1 = device_id_1 < device_id_2 ? device_id_1 : device_id_2;
+  const id2 = device_id_1 < device_id_2 ? device_id_2 : device_id_1;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM device_pairs WHERE device_id_1 = $1 AND device_id_2 = $2 RETURNING *`,
+      [id1, id2]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Pair not found' });
+    }
+
+    return res.status(200).json({ message: 'Devices unpaired successfully' });
+  } catch (err) {
+    console.error('Error unpairing devices:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
