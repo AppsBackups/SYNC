@@ -16,16 +16,17 @@ exports.syncData = async (req, res) => {
       if (changes[table]) {
         updatedIds[table] = [];
         for (const record of changes[table]) {
-          updatedIds[table].push(record.global_id);
           await upsertRecord(table, record);
+          updatedIds[table].push(record.global_id);
         }
         await logSync(deviceId, "push", table, updatedIds[table]);
       }
     }
 
-    // PULL changes
+    // PULL changes (based on timestamp only)
     for (const table of tableList) {
-      const rows = await getRecordsSince(table, lastSyncTimestamp, updatedIds[table] || []);
+      const rows = await getRecordsSince(table, lastSyncTimestamp);
+      console.log(`📥 Pulled ${rows.length} rows from ${table}`);
       if (rows.length > 0) {
         pullChanges[table] = rows;
         const pulledIds = rows.map(row => row.global_id);
@@ -34,6 +35,7 @@ exports.syncData = async (req, res) => {
     }
 
     const currentServerTimestamp = new Date().toISOString();
+
     res.status(200).json({
       currentServerTimestamp,
       changes: pullChanges,

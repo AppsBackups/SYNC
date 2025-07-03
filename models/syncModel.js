@@ -1,23 +1,15 @@
 const pool = require("../config/db");
 
-// Get records modified after a given timestamp
-const getRecordsSince = async (table, timestamp, excludeIds = []) => {
+const getRecordsSince = async (table, timestamp) => {
   try {
-    if (!table) throw new Error("Table name is required");
-    if (!timestamp) throw new Error("Timestamp is required");
+    if (!table || !timestamp) throw new Error("Table name and timestamp are required");
 
-    const params = [timestamp];
-    let query = `SELECT * FROM "${table}" WHERE "last_modified" > $1`;
-
-    if (excludeIds.length > 0) {
-      if (!Array.isArray(excludeIds)) throw new Error("excludeIds must be an array");
-      const idParams = excludeIds.map((_, i) => `$${i + 2}`).join(",");
-      query += ` AND "global_id" NOT IN (${idParams})`;
-      params.push(...excludeIds);
-    }
-
-    query += ' ORDER BY "last_modified" ASC';
-    const { rows } = await pool.query(query, params);
+    const query = `
+      SELECT * FROM "${table}"
+      WHERE "last_modified" > $1
+      ORDER BY "last_modified" ASC
+    `;
+    const { rows } = await pool.query(query, [timestamp]);
     return rows;
   } catch (error) {
     console.error("❌ Error in getRecordsSince:", { table, error });
@@ -25,18 +17,14 @@ const getRecordsSince = async (table, timestamp, excludeIds = []) => {
   }
 };
 
-// Insert or update a record using UPSERT (based on global_id)
 const upsertRecord = async (table, record) => {
   try {
-    if (!table) throw new Error("Table name is required");
-    if (!record || typeof record !== "object") throw new Error("Record must be an object");
-    if (!record.global_id) throw new Error("Record must have a global_id property");
+    if (!table || !record || !record.global_id) throw new Error("Invalid table or record");
 
     const columns = Object.keys(record);
     const values = Object.values(record);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
     const quotedColumns = columns.map(col => `"${col}"`).join(",");
-
     const updates = columns
       .filter(col => col !== "global_id")
       .map(col => `"${col}" = EXCLUDED."${col}"`)
@@ -59,7 +47,6 @@ const upsertRecord = async (table, record) => {
   }
 };
 
-// Log each sync activity
 const logSync = async (deviceId, direction, tableName, recordIds = []) => {
   try {
     const query = `
