@@ -1,21 +1,17 @@
 const pool = require("../config/db");
 
 const getRecordsSince = async (table, timestamp) => {
-  try {
-    if (!table || !timestamp) throw new Error("Table name and timestamp are required");
+  if (!table || !timestamp) throw new Error("Missing table or timestamp");
 
-    const query = `
-      SELECT * FROM "${table}"
-      WHERE "last_modified" > $1
-      ORDER BY "last_modified" ASC
-    `;
-    const { rows } = await pool.query(query, [timestamp]);
-    return rows;
-  } catch (error) {
-    console.error("❌ Error in getRecordsSince:", { table, error });
-    throw error;
-  }
+  const query = `
+    SELECT * FROM "${table}"
+    WHERE "last_modified" > $1
+    ORDER BY "last_modified" ASC
+  `;
+  const { rows } = await pool.query(query, [timestamp]);
+  return rows;
 };
+
 
 const upsertRecord = async (table, record) => {
   try {
