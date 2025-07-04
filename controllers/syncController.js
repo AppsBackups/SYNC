@@ -33,6 +33,10 @@ exports.syncData = async (req, res) => {
       } else if (record.last_modified instanceof Date) {
         record.last_modified = record.last_modified.toISOString();
       }
+      if (table === "Item") {
+  console.log("🔍 Insert Item.last_modified =", record.last_modified, typeof record.last_modified);
+}
+
 
       await upsertRecord(table, record);
       ids.push(record.global_id);

@@ -4,9 +4,11 @@ const cors = require('cors');
 const syncRoutes = require('./routes/syncRoute');
 const transactionRoutes = require('./routes/transactionRoutes');
 const deviceRoutes = require('./routes/deviceRoutes');
-
+const path = require("path");
 
 const pool = require("./config/db");
+const receiptRoutes = require("./routes/receiptRoutes");
+
 
 
 
@@ -25,6 +27,10 @@ app.use(bodyParser.json());
 
 app.use('/api', syncRoutes ,transactionRoutes);
 app.use('/api', deviceRoutes);
+// Middleware
+
+app.use("/receipts", express.static(path.join(__dirname, "receipts"))); // Serve PDFs
+app.use("/api", receiptRoutes);
 
 
 app.use((err, req, res, next) => {

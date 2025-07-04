@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1 { text-align: center; }
+    .section { margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #aaa; padding: 8px; text-align: left; }
+    .right { text-align: right; }
+    .bold { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Receipt</h1>
+
+  <div class="section">
+    <p><strong>Date:</strong> {{timestamp}}</p>
+    {{customer}}
+    <p><strong>Payment Method:</strong> {{paymentMethod}}</p>
+  </div>
+
+  <div class="section">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th><th>Qty</th><th>Unit Price</th><th>Line Amt</th><th>VAT</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{items}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section right">
+    <p>Subtotal: {{subtotal}}</p>
+    <p>VAT: {{vat}}</p>
+    <p>Tip: {{tip}}</p>
+    <p>Discount: {{discount}}</p>
+    <p class="bold">Total: {{total}}</p>
+  </div>
+</body>
+</html>
