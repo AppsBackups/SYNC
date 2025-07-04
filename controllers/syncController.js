@@ -11,16 +11,36 @@ exports.syncData = async (req, res) => {
 
   try {
     // 1. PUSH: apply incoming changes from this device
+    // for (const table of tableList) {
+    //   if (Array.isArray(changes[table])) {
+    //     const ids = [];
+    //     for (const record of changes[table]) {
+    //       await upsertRecord(table, record);
+    //       ids.push(record.global_id);
+    //     }
+    //     await logSync(deviceId, "push", table, ids);
+    //   }
+    // }
+
     for (const table of tableList) {
-      if (Array.isArray(changes[table])) {
-        const ids = [];
-        for (const record of changes[table]) {
-          await upsertRecord(table, record);
-          ids.push(record.global_id);
-        }
-        await logSync(deviceId, "push", table, ids);
+  if (Array.isArray(changes[table])) {
+    const ids = [];
+    for (const record of changes[table]) {
+
+      // ✅ Fix: Ensure last_modified is ISO string before upsert
+      if (!record.last_modified) {
+        record.last_modified = new Date().toISOString();
+      } else if (record.last_modified instanceof Date) {
+        record.last_modified = record.last_modified.toISOString();
       }
+
+      await upsertRecord(table, record);
+      ids.push(record.global_id);
     }
+    await logSync(deviceId, "push", table, ids);
+  }
+}
+
 
     // 2. PULL: get all data modified after lastSyncTimestamp
     for (const table of tableList) {
