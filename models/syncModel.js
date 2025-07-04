@@ -26,14 +26,23 @@ const upsertRecord = async (table, record) => {
       .map(col => `"${col}" = EXCLUDED."${col}"`)
       .join(", ");
 
+    // const query = `
+    //   INSERT INTO "${table}" (${quotedColumns})
+    //   VALUES (${placeholders})
+    //   ON CONFLICT ("global_id")
+    //   DO UPDATE SET ${updates}
+    //   WHERE "${table}"."last_modified" <= EXCLUDED."last_modified"
+    //   RETURNING *;
+    // `;
     const query = `
-      INSERT INTO "${table}" (${quotedColumns})
-      VALUES (${placeholders})
-      ON CONFLICT ("global_id")
-      DO UPDATE SET ${updates}
-      WHERE "${table}"."last_modified" <= EXCLUDED."last_modified"
-      RETURNING *;
-    `;
+  INSERT INTO "${table}" (${quotedColumns})
+  VALUES (${placeholders})
+  ON CONFLICT ("global_id")
+  DO UPDATE SET ${updates}
+  WHERE "${table}"."last_modified"::timestamptz <= EXCLUDED."last_modified"::timestamptz
+  RETURNING *;
+`;
+
 
     const { rows } = await pool.query(query, values);
     return rows[0];
