@@ -5,6 +5,7 @@ const syncRoutes = require('./routes/syncRoute');
 const transactionRoutes = require('./routes/transactionRoutes');
 const deviceRoutes = require('./routes/deviceRoutes');
 const path = require("path");
+const fs = require("fs");
 
 const pool = require("./config/db");
 const receiptRoutes = require("./routes/receiptRoutes");
@@ -31,6 +32,17 @@ app.use('/api', deviceRoutes);
 
 app.use("/receipts", express.static(path.join(__dirname, "receipts"))); // Serve PDFs
 app.use("/api", receiptRoutes);
+
+
+
+app.get("/receipt/:filename", (req, res) => {
+  const filePath = path.join("/tmp/receipts", req.params.filename);
+  if (fs.existsSync(filePath)) {
+    res.download(filePath); // or res.sendFile(filePath) to view in browser
+  } else {
+    res.status(404).json({ error: "File not found" });
+  }
+});
 
 
 app.use((err, req, res, next) => {
