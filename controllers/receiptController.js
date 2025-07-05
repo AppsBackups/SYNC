@@ -3,8 +3,8 @@ const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const puppeteer = require("puppeteer");
 
-// Ensure receipts directory exists
-const receiptsDir = path.join(__dirname, "../receipts");
+// Use /tmp directory (writable on Render)
+const receiptsDir = "/tmp/receipts";
 fs.ensureDirSync(receiptsDir);
 
 exports.generateReceipt = async (req, res) => {
@@ -15,9 +15,10 @@ exports.generateReceipt = async (req, res) => {
 
     await generatePDF(receiptData, pdfPath);
 
-    const receiptUrl = `${req.protocol}://${req.get("host")}/receipts/${receiptId}.pdf`;
-
-    res.status(200).json({ receiptId, receiptUrl });
+    // Either:
+    // ✅ Upload this PDF to S3 or Firebase and return public URL
+    // ❌ OR: Just return the file path (but not public on Render unless served manually)
+    res.status(200).json({ receiptId, receiptPath: pdfPath });
   } catch (err) {
     console.error("Receipt PDF generation failed:", err);
     res.status(500).json({ error: "Failed to generate receipt." });
@@ -25,7 +26,18 @@ exports.generateReceipt = async (req, res) => {
 };
 
 async function generatePDF(data, outputPath) {
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-zygote",
+      "--single-process"
+    ]
+  });
+
   const page = await browser.newPage();
 
   const templatePath = path.join(__dirname, "../templates/receiptTemplate.html");
@@ -43,8 +55,7 @@ async function generatePDF(data, outputPath) {
         <td>${item.unitPrice}</td>
         <td>${item.lineAmount}</td>
         <td>${item.vatAmount.toFixed(2)}</td>
-      </tr>`)
-    .join("");
+      </tr>`).join("");
 
   const subtotal = data.items.reduce((sum, i) => sum + i.lineAmount, 0);
 
