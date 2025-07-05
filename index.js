@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const syncRoutes = require('./routes/syncRoute');
 const transactionRoutes = require('./routes/transactionRoutes');
-const deviceRoutes = require('./routes/deviceRoutes');
+const pairingRoutes = require('./routes/pairingRoutes');
 const path = require("path");
 const fs = require("fs");
 
@@ -27,7 +27,7 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 app.use('/api', syncRoutes ,transactionRoutes);
-app.use('/api', deviceRoutes);
+app.use('/api/pairing', pairingRoutes);
 // Middleware
 
 app.use("/receipts", express.static(path.join(__dirname, "receipts"))); // Serve PDFs
