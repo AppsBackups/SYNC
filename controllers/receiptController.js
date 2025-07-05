@@ -19,10 +19,15 @@ exports.generateReceipt = async (req, res) => {
     // ✅ Upload this PDF to S3 or Firebase and return public URL
     // ❌ OR: Just return the file path (but not public on Render unless served manually)
     res.status(200).json({ receiptId, receiptPath: pdfPath });
-  } catch (err) {
-    console.error("Receipt PDF generation failed:", err);
-    res.status(500).json({ error: "Failed to generate receipt." });
-  }
+  }catch (err) {
+  console.error("Receipt PDF generation failed:", err);
+  res.status(500).json({
+    error: "Failed to generate receipt.",
+    message: err.message,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined
+  });
+}
+
 };
 
 async function generatePDF(data, outputPath) {
