@@ -19,38 +19,38 @@ exports.syncData = async (req, res) => {
   }
 
   try {
-    // ✅ 1. Get all devices paired with the current device
+    // ✅ Step 1: Get paired device IDs
     const pairedDeviceIds = await getPairedDeviceIds(deviceId);
 
-    // ✅ 2. Push changes from this device to server
+    // ✅ Step 2: Push - Apply incoming changes from client
     for (const table of tableList) {
       if (Array.isArray(changes?.[table])) {
         const ids = [];
 
         for (const record of changes[table]) {
-          // Ensure timestamp is valid ISO string
           record.last_modified = record.last_modified || new Date().toISOString();
-          record.device_id = deviceId; // track the source of the record
-          await upsertRecord(table, record);
-          ids.push(record.global_id);
+          record.device_id = deviceId;
+          const updated = await upsertRecord(table, record);
+          if (updated) ids.push(updated.global_id);
         }
 
-        // Log pushed changes
         await logSync(deviceId, "push", table, ids);
       }
     }
 
-    // ✅ 3. Pull records from all paired devices
-    for (const table of tableList) {
-      const rows = await getRecordsSinceFromDevices(table, lastSyncTimestamp, pairedDeviceIds);
-      if (rows.length > 0) {
-        pullChanges[table] = rows;
-        const ids = rows.map(r => r.global_id);
-        await logSync(deviceId, "pull", table, ids);
+    // ✅ Step 3: Pull - Get new records from paired devices since last sync
+    if (pairedDeviceIds.length > 0) {
+      for (const table of tableList) {
+        const rows = await getRecordsSinceFromDevices(table, lastSyncTimestamp, pairedDeviceIds);
+        if (rows.length > 0) {
+          pullChanges[table] = rows;
+          const ids = rows.map(r => r.global_id);
+          await logSync(deviceId, "pull", table, ids);
+        }
       }
     }
 
-    // ✅ 4. Return current server time and new changes
+    // ✅ Step 4: Return current timestamp + pulled changes
     res.status(200).json({
       currentServerTimestamp: new Date().toISOString(),
       changes: pullChanges
