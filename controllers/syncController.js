@@ -1,4 +1,9 @@
-const { upsertRecord, getRecordsSince, logSync } = require("../models/syncModel");
+const {
+  upsertRecord,
+  getRecordsSinceFromDevices,
+  logSync,
+  getPairedDeviceIds
+} = require("../models/syncModel");
 
 const tableList = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
@@ -9,46 +14,35 @@ exports.syncData = async (req, res) => {
   const { deviceId, lastSyncTimestamp, changes } = req.body;
   const pullChanges = {};
 
-  try {
-    // 1. PUSH: apply incoming changes from this device
-    // for (const table of tableList) {
-    //   if (Array.isArray(changes[table])) {
-    //     const ids = [];
-    //     for (const record of changes[table]) {
-    //       await upsertRecord(table, record);
-    //       ids.push(record.global_id);
-    //     }
-    //     await logSync(deviceId, "push", table, ids);
-    //   }
-    // }
-
-    for (const table of tableList) {
-  if (Array.isArray(changes[table])) {
-    const ids = [];
-    for (const record of changes[table]) {
-
-      // ✅ Fix: Ensure last_modified is ISO string before upsert
-      if (!record.last_modified) {
-        record.last_modified = new Date().toISOString();
-      } else if (record.last_modified instanceof Date) {
-        record.last_modified = record.last_modified.toISOString();
-      }
-      if (table === "Item") {
-  console.log("🔍 Insert Item.last_modified =", record.last_modified, typeof record.last_modified);
-}
-
-
-      await upsertRecord(table, record);
-      ids.push(record.global_id);
-    }
-    await logSync(deviceId, "push", table, ids);
+  if (!deviceId || !lastSyncTimestamp) {
+    return res.status(400).json({ error: "deviceId and lastSyncTimestamp are required." });
   }
-}
 
+  try {
+    // ✅ 1. Get all devices paired with the current device
+    const pairedDeviceIds = await getPairedDeviceIds(deviceId);
 
-    // 2. PULL: get all data modified after lastSyncTimestamp
+    // ✅ 2. Push changes from this device to server
     for (const table of tableList) {
-      const rows = await getRecordsSince(table, lastSyncTimestamp);
+      if (Array.isArray(changes?.[table])) {
+        const ids = [];
+
+        for (const record of changes[table]) {
+          // Ensure timestamp is valid ISO string
+          record.last_modified = record.last_modified || new Date().toISOString();
+          record.device_id = deviceId; // track the source of the record
+          await upsertRecord(table, record);
+          ids.push(record.global_id);
+        }
+
+        // Log pushed changes
+        await logSync(deviceId, "push", table, ids);
+      }
+    }
+
+    // ✅ 3. Pull records from all paired devices
+    for (const table of tableList) {
+      const rows = await getRecordsSinceFromDevices(table, lastSyncTimestamp, pairedDeviceIds);
       if (rows.length > 0) {
         pullChanges[table] = rows;
         const ids = rows.map(r => r.global_id);
@@ -56,11 +50,13 @@ exports.syncData = async (req, res) => {
       }
     }
 
-    // 3. Respond with new server timestamp
-    const currentServerTimestamp = new Date().toISOString();
-    res.status(200).json({ currentServerTimestamp, changes: pullChanges });
+    // ✅ 4. Return current server time and new changes
+    res.status(200).json({
+      currentServerTimestamp: new Date().toISOString(),
+      changes: pullChanges
+    });
   } catch (err) {
     console.error("❌ syncData error:", err);
-    res.status(500).json({ error: "Failed to sync" });
+    res.status(500).json({ error: "Failed to sync." });
   }
 };
