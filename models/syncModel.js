@@ -9,13 +9,19 @@ const getRecordsSinceFromDevices = async (table, timestamp, deviceIds) => {
   const placeholders = deviceIds.map((_, i) => `$${i + 2}`).join(", ");
   const query = `
     SELECT * FROM "${table}"
-    WHERE "last_modified" > $1 AND "device_id" IN (${placeholders})
-    ORDER BY "last_modified" ASC
+    WHERE "last_modified"::timestamptz > $1::timestamptz
+      AND "device_id" IN (${placeholders})
+    ORDER BY "last_modified"::timestamptz ASC
   `;
   const values = [timestamp, ...deviceIds];
 
-  const { rows } = await pool.query(query, values);
-  return rows;
+  try {
+    const { rows } = await pool.query(query, values);
+    return rows;
+  } catch (error) {
+    console.error(`❌ Error in getRecordsSinceFromDevices for ${table}:`, error.message);
+    return [];
+  }
 };
 
 // 🔁 Get list of deviceIds paired with this device
