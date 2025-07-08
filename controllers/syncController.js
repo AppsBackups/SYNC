@@ -2,7 +2,8 @@ const {
   upsertRecord,
   getRecordsSinceFromDevices,
   logSync,
-  getPairedDeviceIds
+  getPairedDeviceIds,
+  getCurrentSyncToken
 } = require("../models/syncModel");
 
 const tableList = [
@@ -11,76 +12,80 @@ const tableList = [
 ];
 
 exports.syncData = async (req, res) => {
-  const { deviceId, lastSyncTimestamp, changes } = req.body;
+  const { deviceId, changes } = req.body;
+
+  // Support both `since_token` and `sync_token`
+  const sinceToken = req.body.since_token ?? req.body.sync_token;
 
   console.log("🔄 Sync request received");
   console.log("🆔 Device ID:", deviceId);
-  console.log("⏱️ Last Sync Timestamp:", lastSyncTimestamp);
+  console.log("🔢 Since Sync Token:", sinceToken);
 
-  const pullChanges = {};
-
-  if (!deviceId || !lastSyncTimestamp) {
+  // Validate input
+  if (!deviceId || sinceToken === undefined || sinceToken === null) {
     return res.status(400).json({
-      error: "Missing deviceId or lastSyncTimestamp"
+      error: "Missing required field: deviceId or sync_token"
     });
   }
 
+  const pullChanges = {};
 
   try {
     // Step 1: Get paired device IDs
     const pairedDeviceIds = await getPairedDeviceIds(deviceId);
-    console.log("📡 Paired device IDs:", pairedDeviceIds);
+    console.log("📡 Paired devices:", pairedDeviceIds);
 
-    // Step 2: Push - Apply incoming changes
+    // Step 2: Push - Save incoming changes to DB
     for (const table of tableList) {
-      const incoming = changes?.[table];
+      const incomingRecords = changes?.[table];
 
-      if (Array.isArray(incoming) && incoming.length > 0) {
-        const updatedIds = [];
+      if (Array.isArray(incomingRecords) && incomingRecords.length > 0) {
+        const updatedGlobalIds = [];
 
-        for (const record of incoming) {
+        for (const record of incomingRecords) {
           try {
-            record.last_modified = record.last_modified || new Date().toISOString();
+            // Remove client-sent sync_token/device_id for safety
+            delete record.sync_token;
             record.device_id = deviceId;
 
             const updated = await upsertRecord(table, record);
 
-            if (updated && updated.global_id) {
-              updatedIds.push(updated.global_id);
+            if (updated?.global_id) {
+              updatedGlobalIds.push(updated.global_id);
             }
           } catch (err) {
-            console.error(`❌ Error updating ${table}:`, err.message, record);
+            console.error(`❌ Error inserting/updating ${table}:`, err.message, record);
           }
         }
 
-        await logSync(deviceId, "push", table, updatedIds);
-        console.log(`📤 Pushed to ${table}:`, updatedIds.length, "records");
+        await logSync(deviceId, "push", table, updatedGlobalIds);
+        console.log(`📤 Pushed ${updatedGlobalIds.length} records to ${table}`);
       }
     }
 
-    // Step 3: Pull - Get changes from paired devices
+    // Step 3: Pull - Get new data from other devices
     if (pairedDeviceIds.length > 0) {
       for (const table of tableList) {
         try {
-          const rows = await getRecordsSinceFromDevices(table, lastSyncTimestamp, pairedDeviceIds);
+          const rows = await getRecordsSinceFromDevices(table, sinceToken, pairedDeviceIds);
           if (rows.length > 0) {
             pullChanges[table] = rows;
-            const rowIds = rows.map(r => r.global_id);
-            await logSync(deviceId, "pull", table, rowIds);
-            console.log(`📥 Pulled from ${table}:`, rowIds.length, "records");
+            const pulledIds = rows.map(r => r.global_id);
+            await logSync(deviceId, "pull", table, pulledIds);
+            console.log(`📥 Pulled ${pulledIds.length} records from ${table}`);
           }
         } catch (err) {
-          console.error(`❌ Error pulling from ${table}:`, err.message);
+          console.error(`❌ Error pulling ${table}:`, err.message);
         }
       }
     }
 
-    // Step 4: Return response
-    const currentTimestamp = new Date().toISOString();
+    // Step 4: Return new sync_token
+    const newSyncToken = await getCurrentSyncToken();
 
     console.log("✅ Sync complete");
     return res.status(200).json({
-      currentServerTimestamp: currentTimestamp,
+      sync_token: newSyncToken,
       changes: pullChanges
     });
 
