@@ -11,6 +11,11 @@ const tableList = [
   "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules"
 ];
 
+const tableListpull = [
+  "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
+  "VAT", "TransactionStatus", "TransactionPosition", "discount_rules"
+];
+
 exports.syncData = async (req, res) => {
   const { deviceId, changes } = req.body;
 
@@ -65,7 +70,7 @@ exports.syncData = async (req, res) => {
 
     // Step 3: Pull - Get new data from other devices
     if (pairedDeviceIds.length > 0) {
-      for (const table of tableList) {
+      for (const table of tableListpull) {
         try {
           const rows = await getRecordsSinceFromDevices(table, sinceToken, pairedDeviceIds);
           if (rows.length > 0) {

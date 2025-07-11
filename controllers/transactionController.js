@@ -67,3 +67,22 @@ exports.getModifiedTransactions = async (req, res) => {
     return res.status(500).json({ error: 'Sync failed' });
   }
 };
+
+
+
+exports.getParkedTransactions = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM "Transactionn" WHERE status = 'Parked'`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Parked transactions fetched successfully",
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Fetch Parked error:', err);
+    return res.status(500).json({ error: 'Failed to fetch parked transactions' });
+  }
+};
