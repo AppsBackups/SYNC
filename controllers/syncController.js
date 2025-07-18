@@ -6,14 +6,16 @@ const {
   getCurrentSyncToken
 } = require("../models/syncModel");
 
+const pool = require("../config/db");
+
 const tableList = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
-  "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules"
+  "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting"
 ];
 
 const tableListpull = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
-  "VAT", "TransactionStatus", "TransactionPosition", "discount_rules"
+  "VAT", "TransactionStatus", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting"
 ];
 
 exports.syncData = async (req, res) => {
@@ -99,5 +101,53 @@ exports.syncData = async (req, res) => {
     return res.status(500).json({
       error: "Sync failed. Check server logs."
     });
+  }
+};
+
+
+
+
+exports.getSyncLogs = async (req, res) => {
+  const { deviceId, direction, startDate, endDate } = req.query;
+
+  let filters = [];
+  let values = [];
+
+  if (deviceId) {
+    values.push(deviceId);
+    filters.push(`device_id = $${values.length}`);
+  }
+
+  if (direction) {
+    values.push(direction);
+    filters.push(`direction = $${values.length}`);
+  }
+
+  if (startDate) {
+    values.push(startDate);
+    filters.push(`synced_at >= $${values.length}`);
+  }
+
+  if (endDate) {
+    values.push(endDate);
+    filters.push(`synced_at <= $${values.length}`);
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+
+  const query = `
+    SELECT id, device_id, direction, table_name, synced_at, record_ids
+    FROM sync_logs
+    ${whereClause}
+    ORDER BY synced_at DESC
+    LIMIT 100
+  `;
+
+  try {
+    const result = await pool.query(query, values);
+    res.status(200).json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("❌ Error fetching sync logs:", err.message);
+    res.status(500).json({ success: false, error: "Failed to fetch sync logs" });
   }
 };
