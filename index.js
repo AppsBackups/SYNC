@@ -4,11 +4,13 @@ const cors = require('cors');
 const syncRoutes = require('./routes/syncRoute');
 const transactionRoutes = require('./routes/transactionRoutes');
 const pairingRoutes = require('./routes/pairingRoutes');
+const planRoutes = require('./routes/planroute');
 const path = require("path");
 const fs = require("fs");
 
 const pool = require("./config/db");
 const receiptRoutes = require("./routes/receiptRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 
 
@@ -26,12 +28,13 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-app.use('/api', syncRoutes ,transactionRoutes);
+app.use('/api', syncRoutes ,transactionRoutes ,planRoutes );
 app.use('/api/pairing', pairingRoutes);
 // Middleware
 
 app.use("/receipts", express.static(path.join(__dirname, "receipts"))); // Serve PDFs
 app.use("/api", receiptRoutes);
+app.use("/api/auth", authRoutes);
 
 
 
