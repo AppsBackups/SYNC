@@ -12,7 +12,10 @@ exports.saveUserPlan = async (req, res) => {
   const deviceLimits = {
     Basic: 1,
     Pro: 3,
-    Premium: 5
+    Premium: 5 ,
+    single_device: 1 ,
+    three_devices: 3 ,
+    eight_devices: 8 
   };
 
   const device_limit = deviceLimits[plan_type] || 1; // fallback to 1
