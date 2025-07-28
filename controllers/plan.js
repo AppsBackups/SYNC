@@ -18,7 +18,7 @@ exports.saveUserPlan = async (req, res) => {
     eight_devices: 8 
   };
 
-  const device_limit = deviceLimits[plan_type] || 1; // fallback to 1
+  const device_limit = deviceLimits[plan_id] || 1; // fallback to 1
 
   try {
     const result = await pool.query(
