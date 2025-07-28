@@ -41,10 +41,10 @@ exports.initiatePairing = async (req, res) => {
 };
 
 exports.requestPairing = async (req, res) => {
-  const { pairingToken, newDeviceId, newDeviceName } = req.body;
+  const { pairingToken, newDeviceId, newDeviceName, newFcmToken } = req.body;
 
-  if (!pairingToken || !newDeviceId || !newDeviceName) {
-    return res.status(400).json({ error: 'pairingToken, newDeviceId, newDeviceName required' });
+  if (!pairingToken || !newDeviceId || !newDeviceName || !newFcmToken) {
+    return res.status(400).json({ error: 'pairingToken, newDeviceId, newDeviceName, newFcmToken required' });
   }
 
   try {
@@ -58,6 +58,7 @@ exports.requestPairing = async (req, res) => {
 
     const initiator = result.rows[0];
 
+    // ✅ Send request to Device A (initiator)
     await sendFCM(initiator.fcm_token, {
       type: 'PAIRING_REQUEST',
       pairingToken,
@@ -66,12 +67,28 @@ exports.requestPairing = async (req, res) => {
       requestTimestamp: new Date().toISOString()
     });
 
-    res.json({ message: 'Pairing request sent to Device A' });
+    // ✅ Send verification to Device B (requester)
+    await sendFCM(newFcmToken, {
+      type: 'PAIRING_INITIATED',
+      message: 'Pairing request sent to Device A. Awaiting confirmation.',
+      deviceId: newDeviceId,
+      deviceName: newDeviceName,
+      timestamp: new Date().toISOString()
+    });
+
+    // ✅ Store Device B's FCM token for later use during confirmation
+    await pool.query(
+      `UPDATE pairing_tokens SET new_fcm_token = $1 WHERE token = $2`,
+      [newFcmToken, pairingToken]
+    );
+
+    res.json({ message: 'Pairing request sent to Device A and verified to Device B' });
   } catch (error) {
     console.error('Request Pairing Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
+
 
 exports.confirmPairing = async (req, res) => {
   const { pairingToken, decision, newDeviceId, newDeviceName } = req.body;
@@ -89,7 +106,12 @@ exports.confirmPairing = async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired pairing token' });
     }
 
-    const { device_id: deviceAId, device_name: deviceAName } = result.rows[0];
+    const {
+      device_id: deviceAId,
+      device_name: deviceAName,
+      fcm_token: deviceAFcm,
+      new_fcm_token: deviceBFcm
+    } = result.rows[0];
 
     if (decision === 'approved') {
       const normalizedPairId = normalizePairId(deviceAId, newDeviceId);
@@ -117,12 +139,39 @@ exports.confirmPairing = async (req, res) => {
         [deviceAId, deviceAName, newDeviceId, newDeviceName, normalizedPairId]
       );
 
+      // ✅ Notify Device A (initiator)
+      await sendFCM(deviceAFcm, {
+        type: 'PAIRING_CONFIRMED',
+        pairedWith: newDeviceId,
+        pairedWithName: newDeviceName,
+        timestamp: new Date().toISOString()
+      });
+
+      // ✅ Notify Device B (requester)
+      await sendFCM(deviceBFcm, {
+        type: 'PAIRING_CONFIRMED',
+        pairedWith: deviceAId,
+        pairedWithName: deviceAName,
+        timestamp: new Date().toISOString()
+      });
+
       res.json({ success: true, message: 'Devices paired successfully.' });
+
     } else {
       await pool.query(
         'UPDATE pairing_tokens SET status = $1 WHERE token = $2',
         ['denied', pairingToken]
       );
+
+      // ✅ Notify Device B (requester) about denial
+      if (deviceBFcm) {
+        await sendFCM(deviceBFcm, {
+          type: 'PAIRING_DENIED',
+          message: 'Pairing request was denied by the other device.',
+          timestamp: new Date().toISOString()
+        });
+      }
+
       res.status(403).json({ error: 'Pairing denied.' });
     }
   } catch (error) {
@@ -130,6 +179,15 @@ exports.confirmPairing = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+
+
+
+
+
+
+
+
 
 exports.getPairedDevices = async (req, res) => {
   const { deviceId } = req.params;
