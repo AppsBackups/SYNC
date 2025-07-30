@@ -67,14 +67,7 @@ exports.requestPairing = async (req, res) => {
       requestTimestamp: new Date().toISOString()
     });
 
-    // ✅ Send verification to Device B (requester)
-    // await sendFCM(newFcmToken, {
-    //   type: 'PAIRING_INITIATED',
-    //   message: 'Pairing request sent to Device A. Awaiting confirmation.',
-    //   deviceId: newDeviceId,
-    //   deviceName: newDeviceName,
-    //   timestamp: new Date().toISOString()
-    // });
+    
 
     // ✅ Store Device B's FCM token for later use during confirmation
     await pool.query(
