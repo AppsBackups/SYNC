@@ -18,19 +18,45 @@ async function sendFCM(token, data) {
 }
 
 exports.initiatePairing = async (req, res) => {
-  const { deviceId, fcmToken, deviceName } = req.body;
-  if (!deviceId || !fcmToken || !deviceName) {
-    return res.status(400).json({ error: 'deviceId, fcmToken, and deviceName are required.' });
+  const { deviceId, fcmToken, deviceName, teanutId } = req.body;
+
+  if (!deviceId || !fcmToken || !deviceName || !teanutId) {
+    return res.status(400).json({ error: 'deviceId, fcmToken, deviceName, and teanut (tenantId) are required.' });
   }
 
   try {
+    // 1. Fetch device limit for tenant
+    const planResult = await pool.query(
+      `SELECT device_limit FROM user_plans WHERE teanut = $1 LIMIT 1`,
+      [teanutId]
+    );
+
+    if (planResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No user plan found for this tenant (teanutId).' });
+    }
+
+    const deviceLimit = planResult.rows[0].device_limit;
+
+    // 2. Count already paired devices for this tenant
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM paired_devices WHERE tenant_id = $1`,
+      [teanutId]
+    );
+
+    const pairedCount = parseInt(countResult.rows[0].count, 10);
+
+    if (pairedCount >= deviceLimit) {
+      return res.status(403).json({ error: `Device limit exceeded for tenant (${deviceLimit} devices allowed).` });
+    }
+
+    // 3. Proceed with pairing token creation
     const token = uuidv4();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
     await pool.query(
-      `INSERT INTO pairing_tokens (token, device_id, fcm_token, device_name, status, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, 'pending', NOW(), $5)`,
-      [token, deviceId, fcmToken, deviceName, expiresAt]
+      `INSERT INTO pairing_tokens (token, device_id, fcm_token, device_name, tenant_id, status, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), $6)`,
+      [token, deviceId, fcmToken, deviceName, teanutId, expiresAt]
     );
 
     res.json({ pairingToken: token, expiresIn: 300 });
@@ -39,6 +65,8 @@ exports.initiatePairing = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+
 
 exports.requestPairing = async (req, res) => {
   const { pairingToken, newDeviceId, newDeviceName, newFcmToken } = req.body;
@@ -103,7 +131,8 @@ exports.confirmPairing = async (req, res) => {
       device_id: deviceAId,
       device_name: deviceAName,
       fcm_token: deviceAFcm,
-      new_fcm_token: deviceBFcm
+      new_fcm_token: deviceBFcm,
+      tenant_id: tenantId // 👈 fetch tenantId from pairing_tokens
     } = result.rows[0];
 
     if (decision === 'approved') {
@@ -127,12 +156,12 @@ exports.confirmPairing = async (req, res) => {
         `INSERT INTO paired_devices (
           device_id, device_name,
           paired_with_device_id, paired_with_device_name,
-          paired_at, normalized_pair_id
-        ) VALUES ($1, $2, $3, $4, NOW(), $5)`,
-        [deviceAId, deviceAName, newDeviceId, newDeviceName, normalizedPairId]
+          paired_at, normalized_pair_id, tenant_id
+        ) VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+        [deviceAId, deviceAName, newDeviceId, newDeviceName, normalizedPairId, tenantId]
       );
 
-      // ✅ Notify Device A (initiator)
+      // ✅ Notify Device A
       await sendFCM(deviceAFcm, {
         type: 'PAIRING_CONFIRMED',
         pairedWith: newDeviceId,
@@ -140,7 +169,7 @@ exports.confirmPairing = async (req, res) => {
         timestamp: new Date().toISOString()
       });
 
-      // ✅ Notify Device B (requester)
+      // ✅ Notify Device B
       await sendFCM(deviceBFcm, {
         type: 'PAIRING_CONFIRMED',
         pairedWith: deviceAId,
@@ -156,7 +185,6 @@ exports.confirmPairing = async (req, res) => {
         ['denied', pairingToken]
       );
 
-      // ✅ Notify Device B (requester) about denial
       if (deviceBFcm) {
         await sendFCM(deviceBFcm, {
           type: 'PAIRING_DENIED',
