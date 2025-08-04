@@ -19,7 +19,7 @@ const tableListpull = [
 ];
 
 exports.syncData = async (req, res) => {
-  const { deviceId, changes } = req.body;
+  const { deviceId, changes ,tenantId } = req.body;
 
   // Support both `since_token` and `sync_token`
   const sinceToken = req.body.since_token ?? req.body.sync_token;
@@ -29,9 +29,9 @@ exports.syncData = async (req, res) => {
   console.log("🔢 Since Sync Token:", sinceToken);
 
   // Validate input
-  if (!deviceId || sinceToken === undefined || sinceToken === null) {
+  if (!deviceId || !tenantId || sinceToken === undefined || sinceToken === null) {
     return res.status(400).json({
-      error: "Missing required field: deviceId or sync_token"
+      error: "Missing required field: deviceId , teanantId or sync_token"
     });
   }
 
@@ -39,7 +39,7 @@ exports.syncData = async (req, res) => {
 
   try {
     // Step 1: Get paired device IDs
-    const pairedDeviceIds = await getPairedDeviceIds(deviceId);
+    const pairedDeviceIds = await getPairedDeviceIds(deviceId, tenantId);
     console.log("📡 Paired devices:", pairedDeviceIds);
 
     // Step 2: Push - Save incoming changes to DB

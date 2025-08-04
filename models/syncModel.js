@@ -30,24 +30,41 @@ const getRecordsSinceFromDevices = async (table, sinceToken, deviceIds) => {
 /**
  * 🔁 Get all paired device IDs for a given deviceId
  */
-const getPairedDeviceIds = async (deviceId) => {
+const getPairedDeviceIds = async (deviceId, tenantId) => {
   const query = `
-    SELECT 
-      CASE
-        WHEN device_id = $1 THEN paired_with_device_id
-        ELSE device_id
-      END AS paired_id
-    FROM paired_devices
-    WHERE device_id = $1 OR paired_with_device_id = $1
+    WITH RECURSIVE paired_network AS (
+      SELECT device_id, paired_with_device_id
+      FROM paired_devices
+      WHERE (device_id = $1 OR paired_with_device_id = $1) AND tenant_id = $2
+
+      UNION
+
+      SELECT pd.device_id, pd.paired_with_device_id
+      FROM paired_devices pd
+      JOIN paired_network pn
+        ON pd.device_id = pn.paired_with_device_id
+        OR pd.paired_with_device_id = pn.device_id
+      WHERE pd.tenant_id = $2
+    ),
+    all_devices AS (
+      SELECT device_id FROM paired_network
+      UNION
+      SELECT paired_with_device_id FROM paired_network
+    )
+    SELECT DISTINCT device_id FROM all_devices
+    UNION
+    SELECT $1; -- Include self
   `;
+
   try {
-    const { rows } = await pool.query(query, [deviceId]);
-    return rows.map(row => row.paired_id);
+    const { rows } = await pool.query(query, [deviceId, tenantId]);
+    return rows.map(row => row.device_id);
   } catch (error) {
     console.error("❌ Error in getPairedDeviceIds:", error.message);
     return [];
   }
 };
+
 
 /**
  * 🔄 Get the latest global sync_token from sync_token table
