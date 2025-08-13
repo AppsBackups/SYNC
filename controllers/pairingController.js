@@ -166,6 +166,7 @@ exports.confirmPairing = async (req, res) => {
         type: 'PAIRING_CONFIRMED',
         pairedWith: newDeviceId,
         pairedWithName: newDeviceName,
+        Tenant: tenantId,
         timestamp: new Date().toISOString()
       });
 
@@ -174,6 +175,7 @@ exports.confirmPairing = async (req, res) => {
         type: 'PAIRING_CONFIRMED',
         pairedWith: deviceAId,
         pairedWithName: deviceAName,
+        Tenant: tenantId,
         timestamp: new Date().toISOString()
       });
 
