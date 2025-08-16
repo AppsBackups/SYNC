@@ -205,9 +205,33 @@ exports.confirmPairing = async (req, res) => {
 
 
 
-
-
-
+exports.paired = async (req, res) => {
+  try {
+    const sql = `
+      WITH all_devices AS (
+        SELECT device_id, device_name, tenant_id
+        FROM paired_devices
+        
+        UNION
+        
+        SELECT paired_with_device_id AS device_id,
+               paired_with_device_name AS device_name,
+               tenant_id
+        FROM paired_devices
+        WHERE paired_with_device_id IS NOT NULL
+      )
+      SELECT DISTINCT device_id, device_name, tenant_id
+      FROM all_devices
+      ORDER BY device_name
+    `;
+    
+    const { rows } = await pool.query(sql);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching devices:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
 
 
 
@@ -276,4 +300,33 @@ exports.unpairDevices = async (req, res) => {
     console.error('Unpair Devices Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
+};
+
+
+
+
+
+exports.gettenautbasedpairs = async (req, res) => {
+  const { teanutId } = req.params;
+  if (!teanutId) return res.status(400).json({ error: 'teanutId is required' });
+  try {
+    const result = await pool.query(
+      `SELECT * FROM paired_devices WHERE tenant_id = $1`,
+      [teanutId]
+    ); 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No paired devices found for this tenant' });
+    }
+    const devices = result.rows.map(row => ({
+      deviceId: row.device_id,
+      deviceName: row.device_name,  
+      pairedWithDeviceId: row.paired_with_device_id,
+      pairedWithDeviceName: row.paired_with_device_name,
+      pairedAt: row.paired_at
+    }));
+    res.json({ pairedDevices: devices });
+  } catch (error) {
+    console.error('Get Paired Devices Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  } 
 };
