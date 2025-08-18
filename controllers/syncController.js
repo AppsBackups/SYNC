@@ -36,6 +36,37 @@ exports.syncData = async (req, res) => {
     });
   }
 
+// 🔍 Step 0: Check plan validity
+    const planQuery = `
+      SELECT purchase_date 
+      FROM user_plans 
+      WHERE tenant_id = $1
+      ORDER BY purchase_date DESC
+      LIMIT 1
+    `;
+    const planResult = await pool.query(planQuery, [tenantId]);
+
+    if (planResult.rows.length === 0) {
+      return res.status(403).json({
+        message: "No active plan found for this tenant. Please purchase a plan."
+      });
+    }
+
+    const purchaseDate = new Date(planResult.rows[0].purchase_date);
+    const oneMonthLater = new Date(purchaseDate);
+    oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+
+    if (new Date() > oneMonthLater) {
+      return res.status(403).json({
+        message: "Plan expired. Please renew your plan to continue syncing."
+      });
+    }
+
+
+
+
+
+
   const pullChanges = {};
 
   try {
