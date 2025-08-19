@@ -11,6 +11,7 @@ const fs = require("fs");
 const pool = require("./config/db");
 const receiptRoutes = require("./routes/receiptRoutes");
 const authRoutes = require("./routes/authRoutes");
+const tableRoutes = require("./routes/tableRoutes");
 
 
 
@@ -28,7 +29,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-app.use('/api', syncRoutes ,transactionRoutes ,planRoutes );
+app.use('/api', syncRoutes ,transactionRoutes ,planRoutes , tableRoutes);
 app.use('/api/pairing', pairingRoutes);
 // Middleware
 
