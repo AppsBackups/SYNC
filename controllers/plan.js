@@ -19,7 +19,7 @@ exports.saveUserPlan = async (req, res) => {
     eight_devices: 7
   };
 
-  const device_limit = deviceLimits[plan_id] || 1;
+  const device_limit = deviceLimits[plan_id] ;
 
   try {
     // Save to database
