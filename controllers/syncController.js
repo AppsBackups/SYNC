@@ -10,7 +10,7 @@ const pool = require("../config/db");
 
 const tableList = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
-  "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting"
+  "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting","error_logs","debug_logs"
 ];
 
 const tableListpull = [
@@ -76,7 +76,8 @@ exports.syncData = async (req, res) => {
 
     console.log("📡 Paired devices:", pairedDeviceIds);
     console.log("📶 Other paired devices:", otherPairedDevices);
-
+    console.log("🔄 Syncing changes since token:", sinceToken) ;
+    console.log("Teanant:", tenantId);
     // 🚫 If not paired with any other device, skip sync
     if (otherPairedDevices.length === 0) {
       console.log(`🚫 Device ${deviceId} is not paired with any other device. Skipping sync.`);
