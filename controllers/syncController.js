@@ -40,7 +40,7 @@ exports.syncData = async (req, res) => {
     const planQuery = `
       SELECT purchase_date 
       FROM user_plans 
-      WHERE tenant_id = $1
+      WHERE teanut = $1
       ORDER BY purchase_date DESC
       LIMIT 1
     `;
