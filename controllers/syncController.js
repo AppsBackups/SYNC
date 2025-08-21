@@ -21,18 +21,19 @@ const tableListpull = [
 
 
 exports.syncData = async (req, res) => {
-  const { deviceId, changes, tenantId ,fcmtoken } = req.body;
+  const { deviceId, changes, tenantId ,fcmtoken , devicename } = req.body;
 
 const saveQuery = `
-  INSERT INTO devices (deviceId, fcmtoken, tenantId)
-  VALUES ($1, $2, $3)
+  INSERT INTO devices (deviceId, fcmtoken, tenantId , devicename)
+  VALUES ($1, $2, $3 , $4)
   ON CONFLICT (deviceId) 
   DO UPDATE SET 
     fcmtoken = EXCLUDED.fcmtoken,
     tenantId = EXCLUDED.tenantId,
+    devicename = EXCLUDED.devicename,
     updated_at = NOW()
 `;
-  await pool.query(saveQuery, [deviceId, fcmtoken, tenantId]);
+  await pool.query(saveQuery, [deviceId, fcmtoken, tenantId, devicename]);
   
 
   // Support both `since_token` and `sync_token`
@@ -249,5 +250,24 @@ exports.mannualSync = async (req, res) => {
   } catch (err) {
     console.error("❌ Sync notification failed:", err);
     return res.status(500).json({ error: "Failed to send sync notification" });
+  }
+};
+
+
+
+
+
+exports.devices = async (req, res) => {
+  try {
+    const query = `SELECT * FROM devices`;
+    const result = await pool.query(query); // no params needed
+
+    return res.status(200).json({
+      success: true,
+      devices: result.rows,
+    });
+  } catch (err) {
+    console.error("❌ Error fetching devices:", err.message);
+    return res.status(500).json({ success: false, error: "Failed to fetch devices" });
   }
 };
