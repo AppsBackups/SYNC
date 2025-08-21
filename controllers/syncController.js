@@ -7,6 +7,7 @@ const {
 } = require("../models/syncModel");
 
 const pool = require("../config/db");
+const admin = require('../config/firebase');
 
 const tableList = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
@@ -20,7 +21,19 @@ const tableListpull = [
 
 
 exports.syncData = async (req, res) => {
-  const { deviceId, changes, tenantId } = req.body;
+  const { deviceId, changes, tenantId ,fcmtoken } = req.body;
+
+const saveQuery = `
+  INSERT INTO devices (deviceId, fcmtoken, tenantId)
+  VALUES ($1, $2, $3)
+  ON CONFLICT (deviceId) 
+  DO UPDATE SET 
+    fcmtoken = EXCLUDED.fcmtoken,
+    tenantId = EXCLUDED.tenantId,
+    updated_at = NOW()
+`;
+  await pool.query(saveQuery, [deviceId, fcmtoken, tenantId]);
+  
 
   // Support both `since_token` and `sync_token`
   const sinceToken = req.body.since_token ?? req.body.sync_token;
@@ -189,5 +202,52 @@ exports.getSyncLogs = async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching sync logs:", err.message);
     res.status(500).json({ success: false, error: "Failed to fetch sync logs" });
+  }
+};
+
+
+
+
+
+
+
+
+exports.mannualSync = async (req, res) => {
+  const { deviceId } = req.body;
+
+  try {
+    // 1. Find device token by deviceId
+    const result = await pool.query(
+      "SELECT fcmtoken FROM devices WHERE deviceid = $1",
+      [deviceId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Device not found" });
+    }
+
+    const deviceToken = result.rows[0].fcmtoken;
+
+    // 2. Send FCM notification
+    const message = {
+      token: deviceToken,
+      notification: {
+        title: "Manual Sync",
+        body: "Sync request has been queued for your device."
+      },
+      data: {
+        type: "SYNC_REQUEST",
+        deviceId: deviceId
+      }
+    };
+
+    const response = await admin.messaging().send(message);
+
+    console.log("✅ Notification sent:", response);
+
+    return res.json({ success: true, messageId: response });
+  } catch (err) {
+    console.error("❌ Sync notification failed:", err);
+    return res.status(500).json({ error: "Failed to send sync notification" });
   }
 };

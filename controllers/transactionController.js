@@ -145,3 +145,24 @@ exports.getParkedTransactions = async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch parked transactions' });
   }
 };
+
+
+
+
+exports.getLogs = async (req, res) => {
+  const { device_id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM "debug_logs" WHERE device_id = $1 `,
+      [device_id]
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching logs:', err);
+    return res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+};
+
+
