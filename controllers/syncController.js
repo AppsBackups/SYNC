@@ -194,7 +194,7 @@ exports.getSyncLogs = async (req, res) => {
     FROM sync_logs
     ${whereClause}
     ORDER BY synced_at DESC
-    LIMIT 100
+    
   `;
 
   try {
@@ -205,6 +205,7 @@ exports.getSyncLogs = async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to fetch sync logs" });
   }
 };
+
 
 
 
