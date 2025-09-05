@@ -2,6 +2,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const PDFDocument = require("pdfkit");
+const staticImages = require("../staticImages");
 
 // Use /tmp for Render
 const receiptsDir = "/tmp/receipts";
@@ -35,13 +36,15 @@ async function generatePDF(data, outputPath) {
     doc.pipe(stream);
 
     // === HEADER ===
-    doc.rect(50, 50, 20, 20).fillColor("#000000").fill();
-    doc.rect(65, 50, 10, 10).fillColor("#f1c40f").fill();
+    const pic = "" ;
+    drawBase64Image(doc, staticImages.companyLogo, 50, 50, 40, 40);
+    //doc.rect(50, 50, 20, 20).fillColor("#000000").fill();
+    // doc.rect(65, 50, 10, 10).fillColor("#f1c40f").fill();
 
     doc.fillColor("#000000").font("Helvetica").fontSize(10);
-    doc.text("Your Company Name", 90, 50);
-    doc.text(`Invoice No : ${data.uuid || "INV-" + Date.now()}`, 90, 65);
-    doc.text(`Date : ${data.timestamp}`, 90, 80);
+    doc.text(`  Kimura Shukokai `, 90, 50);
+    doc.text(`  Invoice No : ${data.uuid || "INV-" + Date.now()}`, 90, 65);
+    doc.text(`  Date : ${data.timestamp}`, 90, 80);
 
     doc.fontSize(20).font("Helvetica-Bold").fillColor("#000000").text("INVOICE", 400, 50);
     doc.moveTo(400, 70).lineTo(490, 70).lineWidth(2).strokeColor("#f1c40f").stroke();
@@ -122,3 +125,23 @@ async function generatePDF(data, outputPath) {
   });
 }
 
+
+
+
+
+function drawBase64Image(doc, base64, x, y, width, height, fallbackColor = "#000000") {
+  if (!base64) {
+    doc.rect(x, y, width, height).fillColor(fallbackColor).fill();
+    return;
+  }
+
+  try {
+    // Remove header and clean whitespace
+    const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '').replace(/\s/g, '');
+    const imgBuffer = Buffer.from(cleanBase64, 'base64');
+    doc.image(imgBuffer, x, y, { width, height });
+  } catch (err) {
+    console.error("Failed to render Base64 image, using fallback rectangle:", err.message);
+    doc.rect(x, y, width, height).fillColor(fallbackColor).fill();
+  }
+}

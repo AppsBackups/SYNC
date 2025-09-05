@@ -27,7 +27,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "10mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use('/api', syncRoutes ,transactionRoutes ,planRoutes , tableRoutes);
 app.use('/api/pairing', pairingRoutes);
