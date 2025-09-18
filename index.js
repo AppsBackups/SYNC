@@ -12,6 +12,7 @@ const pool = require("./config/db");
 const receiptRoutes = require("./routes/receiptRoutes");
 const authRoutes = require("./routes/authRoutes");
 const tableRoutes = require("./routes/tableRoutes");
+const companyRoutes = require("./routes/companyRoutes");
 
 
 
@@ -37,6 +38,7 @@ app.use('/api/pairing', pairingRoutes);
 app.use("/receipts", express.static(path.join(__dirname, "receipts"))); // Serve PDFs
 app.use("/api", receiptRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api", companyRoutes);
 
 
 
