@@ -8,6 +8,14 @@ const planRoutes = require('./routes/planroute');
 const path = require("path");
 const fs = require("fs");
 
+const app = express();
+
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(bodyParser.json({ limit: "50mb" }));
+app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
+app.use(cors());
+
 const pool = require("./config/db");
 const receiptRoutes = require("./routes/receiptRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -17,7 +25,7 @@ const companyRoutes = require("./routes/companyRoutes");
 
 
 
-const app = express();
+
 
 
 const corsOptions = {
