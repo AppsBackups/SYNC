@@ -11,12 +11,12 @@ const admin = require('../config/firebase');
 
 const tableList = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
-  "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting","error_logs","debug_logs"
+  "VAT", "TransactionStatus", "Transactionn", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting","error_logs","debug_logs","Location","Tables" ,"Reservations" , "Orders" , "OrderItems" ,"MergedTables"
 ];
 
 const tableListpull = [
   "User", "Item", "ItemGroup", "Customer", "CustomerGroup",
-  "VAT", "TransactionStatus", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting"
+  "VAT", "TransactionStatus", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting" ,"Location","Tables" ,"Reservations" , "Orders" , "OrderItems" ,"MergedTables"
 ];
 
 
