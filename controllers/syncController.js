@@ -3,7 +3,8 @@ const {
   getRecordsSinceFromDevices,
   logSync,
   getPairedDeviceIds,
-  getCurrentSyncToken
+  getCurrentSyncToken,
+  safeUpsertRecord
 } = require("../models/syncModel");
 
 const pool = require("../config/db");
@@ -20,21 +21,21 @@ const tableListpull = [
 ];
 
 
-exports.syncData = async (req, res) => {
-  const { deviceId, changes, tenantId ,fcmtoken , devicename } = req.body;
 
-const saveQuery = `
-  INSERT INTO devices (deviceId, fcmtoken, tenantId , devicename)
-  VALUES ($1, $2, $3 , $4)
-  ON CONFLICT (deviceId) 
-  DO UPDATE SET 
-    fcmtoken = EXCLUDED.fcmtoken,
-    tenantId = EXCLUDED.tenantId,
-    devicename = EXCLUDED.devicename,
-    updated_at = NOW()
-`;
+exports.syncData = async (req, res) => {
+  const { deviceId, changes, tenantId, fcmtoken, devicename } = req.body;
+
+  const saveQuery = `
+    INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (deviceId)
+    DO UPDATE SET
+      fcmtoken = EXCLUDED.fcmtoken,
+      tenantId = EXCLUDED.tenantId,
+      devicename = EXCLUDED.devicename,
+      updated_at = NOW()
+  `;
   await pool.query(saveQuery, [deviceId, fcmtoken, tenantId, devicename]);
-  
 
   // Support both `since_token` and `sync_token`
   const sinceToken = req.body.since_token ?? req.body.sync_token;
@@ -43,62 +44,54 @@ const saveQuery = `
   console.log("🆔 Device ID:", deviceId);
   console.log("🔢 Since Sync Token:", sinceToken);
 
-  // Validate input
   if (!deviceId || !tenantId || sinceToken === undefined || sinceToken === null) {
     return res.status(400).json({
-      error: "Missing required field: deviceId, tenantId or sync_token"
+      error: "Missing required field: deviceId, tenantId or sync_token",
     });
   }
 
-// 🔍 Step 0: Check plan validity
-    const planQuery = `
-      SELECT purchase_date 
-      FROM user_plans 
-      WHERE teanut = $1
-      ORDER BY purchase_date DESC
-      LIMIT 1
-    `;
-    const planResult = await pool.query(planQuery, [tenantId]);
+  // 🔍 Step 0: Check plan validity
+  const planQuery = `
+    SELECT purchase_date 
+    FROM user_plans 
+    WHERE teanut = $1
+    ORDER BY purchase_date DESC
+    LIMIT 1
+  `;
+  const planResult = await pool.query(planQuery, [tenantId]);
 
-    if (planResult.rows.length === 0) {
-      return res.status(403).json({
-        message: "No active plan found for this tenant. Please purchase a plan."
-      });
-    }
+  if (planResult.rows.length === 0) {
+    return res.status(403).json({
+      message: "No active plan found for this tenant. Please purchase a plan.",
+    });
+  }
 
-    const purchaseDate = new Date(planResult.rows[0].purchase_date);
-    const oneMonthLater = new Date(purchaseDate);
-    oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+  const purchaseDate = new Date(planResult.rows[0].purchase_date);
+  const oneMonthLater = new Date(purchaseDate);
+  oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
 
-    if (new Date() > oneMonthLater) {
-      return res.status(403).json({
-        message: "Plan expired. Please renew your plan to continue syncing."
-      });
-    }
-
-
-
-
-
+  if (new Date() > oneMonthLater) {
+    return res.status(403).json({
+      message: "Plan expired. Please renew your plan to continue syncing.",
+    });
+  }
 
   const pullChanges = {};
 
   try {
     // Step 1: Get paired device IDs
     const pairedDeviceIds = await getPairedDeviceIds(deviceId, tenantId);
-    const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
+    const otherPairedDevices = pairedDeviceIds.filter((id) => id !== deviceId);
 
     console.log("📡 Paired devices:", pairedDeviceIds);
     console.log("📶 Other paired devices:", otherPairedDevices);
-    console.log("🔄 Syncing changes since token:", sinceToken) ;
-    console.log("Teanant:", tenantId);
-    // 🚫 If not paired with any other device, skip sync
+
     if (otherPairedDevices.length === 0) {
       console.log(`🚫 Device ${deviceId} is not paired with any other device. Skipping sync.`);
       return res.status(200).json({
         message: "Device is not paired with any other device. Sync skipped.",
         sync_token: sinceToken,
-        changes: {}
+        changes: {},
       });
     }
 
@@ -111,10 +104,10 @@ const saveQuery = `
 
         for (const record of incomingRecords) {
           try {
-            delete record.sync_token; // Remove client-sent sync_token/device_id
+            delete record.sync_token;
             record.device_id = deviceId;
 
-            const updated = await upsertRecord(table, record);
+            const updated = await safeUpsertRecord(table, record);
             if (updated?.global_id) {
               updatedGlobalIds.push(updated.global_id);
             }
@@ -134,7 +127,7 @@ const saveQuery = `
         const rows = await getRecordsSinceFromDevices(table, sinceToken, otherPairedDevices);
         if (rows.length > 0) {
           pullChanges[table] = rows;
-          const pulledIds = rows.map(r => r.global_id);
+          const pulledIds = rows.map((r) => r.global_id);
           await logSync(deviceId, "pull", table, pulledIds);
           console.log(`📥 Pulled ${pulledIds.length} records from ${table}`);
         }
@@ -146,19 +139,195 @@ const saveQuery = `
     // Step 4: Return new sync_token
     const newSyncToken = await getCurrentSyncToken();
 
+    // ✅ Step 5: Notify all paired devices to sync
+    try {
+      const fcmQuery = `
+        SELECT fcmtoken FROM devices
+        WHERE deviceId = ANY($1::text[])
+        AND fcmtoken IS NOT NULL
+      `;
+      const fcmResult = await pool.query(fcmQuery, [otherPairedDevices]);
+      const tokens = fcmResult.rows.map((r) => r.fcmtoken);
+
+      if (tokens.length > 0) {
+        const message = {
+          notification: {
+            title: "Sync Update",
+            body: "Data has been updated by another device. Please sync to get the latest data.",
+          },
+          data: {
+            type: "SYNC_TRIGGER",
+            triggeredBy: deviceId,
+          },
+        };
+
+        const sendPromises = tokens.map((token) =>
+          admin.messaging().send({ ...message, token })
+        );
+
+        await Promise.all(sendPromises);
+        console.log(`📲 Sync notifications sent to ${tokens.length} paired devices.`);
+      }
+    } catch (notifyErr) {
+      console.error("⚠️ Failed to notify paired devices:", notifyErr.message);
+    }
+
     console.log("✅ Sync complete");
     return res.status(200).json({
       sync_token: newSyncToken,
-      changes: pullChanges
+      changes: pullChanges,
     });
-
   } catch (err) {
     console.error("❌ syncData error:", err);
     return res.status(500).json({
-      error: "Sync failed. Check server logs."
+      error: "Sync failed. Check server logs.",
     });
   }
 };
+
+
+
+
+
+// exports.syncData = async (req, res) => {
+//   const { deviceId, changes, tenantId ,fcmtoken , devicename } = req.body;
+
+// const saveQuery = `
+//   INSERT INTO devices (deviceId, fcmtoken, tenantId , devicename)
+//   VALUES ($1, $2, $3 , $4)
+//   ON CONFLICT (deviceId) 
+//   DO UPDATE SET 
+//     fcmtoken = EXCLUDED.fcmtoken,
+//     tenantId = EXCLUDED.tenantId,
+//     devicename = EXCLUDED.devicename,
+//     updated_at = NOW()
+// `;
+//   await pool.query(saveQuery, [deviceId, fcmtoken, tenantId, devicename]);
+  
+
+//   // Support both `since_token` and `sync_token`
+//   const sinceToken = req.body.since_token ?? req.body.sync_token;
+
+//   console.log("🔄 Sync request received");
+//   console.log("🆔 Device ID:", deviceId);
+//   console.log("🔢 Since Sync Token:", sinceToken);
+
+//   // Validate input
+//   if (!deviceId || !tenantId || sinceToken === undefined || sinceToken === null) {
+//     return res.status(400).json({
+//       error: "Missing required field: deviceId, tenantId or sync_token"
+//     });
+//   }
+
+// // 🔍 Step 0: Check plan validity
+//     const planQuery = `
+//       SELECT purchase_date 
+//       FROM user_plans 
+//       WHERE teanut = $1
+//       ORDER BY purchase_date DESC
+//       LIMIT 1
+//     `;
+//     const planResult = await pool.query(planQuery, [tenantId]);
+
+//     if (planResult.rows.length === 0) {
+//       return res.status(403).json({
+//         message: "No active plan found for this tenant. Please purchase a plan."
+//       });
+//     }
+
+//     const purchaseDate = new Date(planResult.rows[0].purchase_date);
+//     const oneMonthLater = new Date(purchaseDate);
+//     oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+
+//     if (new Date() > oneMonthLater) {
+//       return res.status(403).json({
+//         message: "Plan expired. Please renew your plan to continue syncing."
+//       });
+//     }
+
+
+
+
+
+
+//   const pullChanges = {};
+
+//   try {
+//     // Step 1: Get paired device IDs
+//     const pairedDeviceIds = await getPairedDeviceIds(deviceId, tenantId);
+//     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
+
+//     console.log("📡 Paired devices:", pairedDeviceIds);
+//     console.log("📶 Other paired devices:", otherPairedDevices);
+//     console.log("🔄 Syncing changes since token:", sinceToken) ;
+//     console.log("Teanant:", tenantId);
+//     // 🚫 If not paired with any other device, skip sync
+//     if (otherPairedDevices.length === 0) {
+//       console.log(`🚫 Device ${deviceId} is not paired with any other device. Skipping sync.`);
+//       return res.status(200).json({
+//         message: "Device is not paired with any other device. Sync skipped.",
+//         sync_token: sinceToken,
+//         changes: {}
+//       });
+//     }
+
+//     // Step 2: Push - Save incoming changes to DB
+//     for (const table of tableList) {
+//       const incomingRecords = changes?.[table];
+
+//       if (Array.isArray(incomingRecords) && incomingRecords.length > 0) {
+//         const updatedGlobalIds = [];
+
+//         for (const record of incomingRecords) {
+//           try {
+//             delete record.sync_token; 
+//             record.device_id = deviceId;
+
+//             const updated = await safeUpsertRecord(table, record);
+//             if (updated?.global_id) {
+//               updatedGlobalIds.push(updated.global_id);
+//             }
+//           } catch (err) {
+//             console.error(`❌ Error inserting/updating ${table}:`, err.message, record);
+//           }
+//         }
+
+//         await logSync(deviceId, "push", table, updatedGlobalIds);
+//         console.log(`📤 Pushed ${updatedGlobalIds.length} records to ${table}`);
+//       }
+//     }
+
+//     // Step 3: Pull - Get new data from other paired devices
+//     for (const table of tableListpull) {
+//       try {
+//         const rows = await getRecordsSinceFromDevices(table, sinceToken, otherPairedDevices);
+//         if (rows.length > 0) {
+//           pullChanges[table] = rows;
+//           const pulledIds = rows.map(r => r.global_id);
+//           await logSync(deviceId, "pull", table, pulledIds);
+//           console.log(`📥 Pulled ${pulledIds.length} records from ${table}`);
+//         }
+//       } catch (err) {
+//         console.error(`❌ Error pulling ${table}:`, err.message);
+//       }
+//     }
+
+//     // Step 4: Return new sync_token
+//     const newSyncToken = await getCurrentSyncToken();
+
+//     console.log("✅ Sync complete");
+//     return res.status(200).json({
+//       sync_token: newSyncToken,
+//       changes: pullChanges
+//     });
+
+//   } catch (err) {
+//     console.error("❌ syncData error:", err);
+//     return res.status(500).json({
+//       error: "Sync failed. Check server logs."
+//     });
+//   }
+// };
 
 
 exports.getSyncLogs = async (req, res) => {

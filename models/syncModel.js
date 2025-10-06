@@ -122,6 +122,46 @@ const upsertRecord = async (table, record) => {
   }
 };
 
+
+const safeUpsertRecord = async (table, record) => {
+  const client = await pool.connect();
+  try {
+    if (!table || !record || !record.global_id)
+      throw new Error("Invalid table or record");
+
+    await client.query("BEGIN");
+
+    // 🧠 Check if the record already exists
+    const query = `SELECT sync_token FROM "${table}" WHERE global_id = $1`;
+    const { rows: existingRows } = await client.query(query, [record.global_id]);
+
+    const existing = existingRows[0];
+
+    // ⚖️ Compare sync_token version to prevent overwriting newer records
+    if (existing && existing.sync_token > (record.sync_token || 0)) {
+      console.log(
+        `⏭ Skipped older record (incoming ${record.sync_token || 0}, existing ${existing.sync_token}) for table: ${table}`
+      );
+      await client.query("ROLLBACK");
+      return { skipped: true };
+    }
+
+    // 🆕 Proceed with upsert only if newer or non-existing
+    const result = await upsertRecord(table, record);
+
+    await client.query("COMMIT");
+    return result;
+
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("❌ Error in safeUpsertRecord:", error.message);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+
 /**
  * 📝 Log sync activity to sync_logs
  */
@@ -142,5 +182,6 @@ module.exports = {
   getPairedDeviceIds,
   getCurrentSyncToken,
   upsertRecord,
-  logSync
+  logSync,
+  safeUpsertRecord
 };
