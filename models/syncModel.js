@@ -4,19 +4,26 @@ const pool = require("../config/db");
  * 🔁 Get records from a table updated since a sync_token
  * Only includes changes from specific device IDs
  */
-const getRecordsSinceFromDevices = async (table, sinceToken, deviceIds) => {
-  if (!table || sinceToken === undefined || !Array.isArray(deviceIds) || deviceIds.length === 0) {
+const getRecordsSinceFromDevices = async (table, sinceToken, deviceIds, tenantId) => {
+  if (
+    !table ||
+    sinceToken === undefined ||
+    !Array.isArray(deviceIds) ||
+    deviceIds.length === 0 ||
+    !tenantId
+  ) {
     return [];
   }
 
-  const placeholders = deviceIds.map((_, i) => `$${i + 2}`).join(", ");
+  const placeholders = deviceIds.map((_, i) => `$${i + 3}`).join(", ");
   const query = `
     SELECT * FROM "${table}"
     WHERE "sync_token" > $1
+      AND "tenant" = $2
       AND "device_id" IN (${placeholders})
     ORDER BY "sync_token" ASC
   `;
-  const values = [sinceToken, ...deviceIds];
+  const values = [sinceToken, tenantId, ...deviceIds];
 
   try {
     const { rows } = await pool.query(query, values);
@@ -27,44 +34,96 @@ const getRecordsSinceFromDevices = async (table, sinceToken, deviceIds) => {
   }
 };
 
+
 /**
  * 🔁 Get all paired device IDs for a given deviceId
  */
+// const getPairedDeviceIds = async (deviceId, tenantId) => {
+//   const query = `
+//     WITH RECURSIVE paired_network AS (
+//       SELECT device_id, paired_with_device_id
+//       FROM paired_devices
+//       WHERE (device_id = $1 OR paired_with_device_id = $1) AND tenant_id = $2
+
+//       UNION
+
+//       SELECT pd.device_id, pd.paired_with_device_id
+//       FROM paired_devices pd
+//       JOIN paired_network pn
+//         ON pd.device_id = pn.paired_with_device_id
+//         OR pd.paired_with_device_id = pn.device_id
+//       WHERE pd.tenant_id = $2
+//     ),
+//     all_devices AS (
+//       SELECT device_id FROM paired_network
+//       UNION
+//       SELECT paired_with_device_id FROM paired_network
+//     )
+//     SELECT DISTINCT device_id FROM all_devices
+//     UNION
+//     SELECT $1; -- Include self
+//   `;
+
+//   try {
+//     const { rows } = await pool.query(query, [deviceId, tenantId]);
+//     return rows.map(row => row.device_id);
+//   } catch (error) {
+//     console.error("❌ Error in getPairedDeviceIds:", error.message);
+//     return [];
+//   }
+// };
+
 const getPairedDeviceIds = async (deviceId, tenantId) => {
-  const query = `
-    WITH RECURSIVE paired_network AS (
-      SELECT device_id, paired_with_device_id
-      FROM paired_devices
-      WHERE (device_id = $1 OR paired_with_device_id = $1) AND tenant_id = $2
-
-      UNION
-
-      SELECT pd.device_id, pd.paired_with_device_id
-      FROM paired_devices pd
-      JOIN paired_network pn
-        ON pd.device_id = pn.paired_with_device_id
-        OR pd.paired_with_device_id = pn.device_id
-      WHERE pd.tenant_id = $2
-    ),
-    all_devices AS (
-      SELECT device_id FROM paired_network
-      UNION
-      SELECT paired_with_device_id FROM paired_network
-    )
-    SELECT DISTINCT device_id FROM all_devices
-    UNION
-    SELECT $1; -- Include self
-  `;
-
   try {
+    // Check if device exists and has a valid tenant
+    const deviceCheck = await pool.query(
+      `SELECT tenantId FROM devices WHERE deviceId = $1`,
+      [deviceId]
+    );
+
+    if (!deviceCheck.rows.length) {
+      console.warn(`⚠️ Device ${deviceId} not found in devices table.`);
+      return [deviceId];
+    }
+
+    // Ensure device belongs to same tenant before pairing traversal
+    const query = `
+      WITH RECURSIVE paired_network AS (
+        SELECT device_id, paired_with_device_id
+        FROM paired_devices
+        WHERE (device_id = $1 OR paired_with_device_id = $1)
+          AND tenant_id = $2
+
+        UNION
+
+        SELECT pd.device_id, pd.paired_with_device_id
+        FROM paired_devices pd
+        JOIN paired_network pn
+          ON pd.device_id = pn.paired_with_device_id
+          OR pd.paired_with_device_id = pn.device_id
+        WHERE pd.tenant_id = $2
+      ),
+      all_devices AS (
+        SELECT device_id FROM paired_network
+        UNION
+        SELECT paired_with_device_id FROM paired_network
+      )
+      SELECT DISTINCT device_id FROM all_devices
+      UNION
+      SELECT $1; -- include self
+    `;
+
     const { rows } = await pool.query(query, [deviceId, tenantId]);
-    return rows.map(row => row.device_id);
+    const deviceIds = rows.map(row => row.device_id);
+
+    console.log(`🔗 Paired devices for ${deviceId} (tenant: ${tenantId}):`, deviceIds);
+
+    return deviceIds;
   } catch (error) {
     console.error("❌ Error in getPairedDeviceIds:", error.message);
-    return [];
+    return [deviceId]; // Always return self to prevent breaking sync
   }
 };
-
 
 /**
  * 🔄 Get the latest global sync_token from sync_token table
