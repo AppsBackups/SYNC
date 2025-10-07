@@ -20,12 +20,12 @@ const tableListpull = [
   "VAT", "TransactionStatus", "TransactionPosition", "discount_rules","Barcode","ItemGroupToDeliveryType","DeliveryType","Salutation", "Setting", "PaymentType","PSPSetting" ,"Location","Tables" ,"Reservations" , "Orders" , "OrderItems" ,"MergedTables"
 ];
 
-
+//saas
 
 exports.syncData = async (req, res) => {
   const { deviceId, changes, tenantId, fcmtoken, devicename } = req.body;
 
-  // Step 0: Save or update device info
+  // Step 0: Save or updat
   const saveQuery = `
     INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
     VALUES ($1, $2, $3, $4)
@@ -48,7 +48,7 @@ exports.syncData = async (req, res) => {
 
   // Step 1: Validate plan
   const planResult = await pool.query(
-    `SELECT purchase_date FROM user_plans WHERE tennut = $1 ORDER BY purchase_date DESC LIMIT 1`,
+    `SELECT purchase_date FROM user_plans WHERE teanut = $1 ORDER BY purchase_date DESC LIMIT 1`,
     [tenantId]
   );
 
