@@ -457,7 +457,7 @@ exports.syncData = async (req, res) => {
 
   // Step 1️⃣ — Validate tenant plan
   const planResult = await pool.query(
-    `SELECT purchase_date FROM user_plans WHERE tenant = $1 ORDER BY purchase_date DESC LIMIT 1`,
+    `SELECT purchase_date FROM user_plans WHERE teanut = $1 ORDER BY purchase_date DESC LIMIT 1`,
     [tenantId]
   );
 
