@@ -300,7 +300,7 @@ const upsertRecord = async (table, record, tenant) => {
 const getRecordsSinceFromDevices = async (table, sinceToken, tenant) => {
   const query = `
     SELECT * FROM "${table}"
-    WHERE sync_token > $1 AND tenant = $2 AND deleted = false
+    WHERE sync_token > $1 AND tenant_id = $2 AND deleted = false
     ORDER BY sync_token ASC;
   `;
   const { rows } = await pool.query(query, [sinceToken, tenant]);
