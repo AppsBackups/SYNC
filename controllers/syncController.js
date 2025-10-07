@@ -514,7 +514,7 @@ exports.syncData = async (req, res) => {
 
     // Step 4️⃣ — Pull new changes from other paired devices (same tenant only)
     for (const table of tableListpull) {
-      const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId);
+      const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId , deviceId);
       if (rows.length > 0) {
         pullChanges[table] = rows;
         await logSync(deviceId, tenantId, "pull");

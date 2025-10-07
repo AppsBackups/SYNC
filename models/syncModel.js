@@ -293,15 +293,18 @@ const upsertRecord = async (table, record, tenantId) => {
 
 
 // 🔹 Get all records from a table since a sync token
-const getRecordsSinceFromDevices = async (table, sinceToken, tenant) => {
+const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) => {
   const query = `
     SELECT * FROM "${table}"
-    WHERE sync_token > $1 AND tenant_id = $2 
+    WHERE sync_token > $1
+      AND tenant_id = $2
+      AND device_id != $3
     ORDER BY sync_token ASC;
   `;
-  const { rows } = await pool.query(query, [sinceToken, tenant]);
+  const { rows } = await pool.query(query, [sinceToken, tenant, deviceId]);
   return rows;
 };
+
 
 // 🔹 Soft delete record (sets deleted = true)
 const deleteRecord = async (table, global_id, tenant) => {
