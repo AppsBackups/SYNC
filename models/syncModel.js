@@ -240,56 +240,7 @@ const getPairedDeviceIds = async (deviceId, tenantId) => {
 
 const pool = require("../config/db");
 
-const upsertRecord = async (table, record, tenantId) => {
-  const client = await pool.connect();
 
-  try {
-    if (!table || !record || !record.global_id) {
-      throw new Error("Invalid table or record");
-    }
-
-    // ✅ Store tenant_id
-    record.tenant_id = tenantId;
-
-    await client.query("BEGIN");
-
-    // ✅ Get sync token
-    const { rows: tokenRows } = await client.query(
-      `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
-    );
-    const syncToken = tokenRows[0].current_token;
-    record.sync_token = syncToken;
-
-    // ✅ Prepare insert/update
-    const columns = Object.keys(record);
-    const values = Object.values(record);
-    const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
-    const quotedColumns = columns.map(c => `"${c}"`).join(",");
-    const updates = columns
-      .filter(c => c !== "global_id")
-      .map(c => `"${c}" = EXCLUDED."${c}"`)
-      .join(", ");
-
-    const query = `
-      INSERT INTO "${table}" (${quotedColumns})
-      VALUES (${placeholders})
-      ON CONFLICT ("global_id")
-      DO UPDATE SET ${updates}
-      RETURNING *;
-    `;
-
-    const { rows } = await client.query(query, values);
-    await client.query("COMMIT");
-
-    return rows[0];
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("❌ Error in upsertRecord:", { table, record, error: err.message });
-    throw err;
-  } finally {
-    client.release();
-  }
-};
 
 
 // 🔹 Get all records from a table since a sync token
@@ -342,12 +293,65 @@ const getCurrentSyncToken = async () => {
 };
 
 // 🔹 Safe upsert that ignores errors
-const safeUpsertRecord = async (table, record, tenant) => {
+const safeUpsertRecord = async (table, record, tenant ,deviceId) => {
   try {
+    
+    record.device_id = deviceId;  // Make sure this runs before safeUpsertRecord
     return await upsertRecord(table, record, tenant);
   } catch (err) {
     console.warn(`⚠️ Skipping record due to error in ${table}:`, err.message);
     return null;
+  }
+};
+
+const upsertRecord = async (table, record, tenantId) => {
+  const client = await pool.connect();
+
+  try {
+    if (!table || !record || !record.global_id) {
+      throw new Error("Invalid table or record");
+    }
+
+    // ✅ Store tenant_id
+    record.tenant_id = tenantId;
+
+    await client.query("BEGIN");
+
+    // ✅ Get sync token
+    const { rows: tokenRows } = await client.query(
+      `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
+    );
+    const syncToken = tokenRows[0].current_token;
+    record.sync_token = syncToken;
+
+    // ✅ Prepare insert/update
+    const columns = Object.keys(record);
+    const values = Object.values(record);
+    const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
+    const quotedColumns = columns.map(c => `"${c}"`).join(",");
+    const updates = columns
+      .filter(c => c !== "global_id")
+      .map(c => `"${c}" = EXCLUDED."${c}"`)
+      .join(", ");
+
+    const query = `
+      INSERT INTO "${table}" (${quotedColumns})
+      VALUES (${placeholders})
+      ON CONFLICT ("global_id")
+      DO UPDATE SET ${updates}
+      RETURNING *;
+    `;
+
+    const { rows } = await client.query(query, values);
+    await client.query("COMMIT");
+
+    return rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("❌ Error in upsertRecord:", { table, record, error: err.message });
+    throw err;
+  } finally {
+    client.release();
   }
 };
 
