@@ -240,7 +240,6 @@ const getPairedDeviceIds = async (deviceId, tenantId) => {
 
 const pool = require("../config/db");
 
-// 🔹 Automatically upserts (inserts or updates) record + handles tenant
 const upsertRecord = async (table, record, tenantId) => {
   const client = await pool.connect();
 
@@ -249,62 +248,30 @@ const upsertRecord = async (table, record, tenantId) => {
       throw new Error("Invalid table or record");
     }
 
-    // ✅ Ensure table name is properly quoted (handles reserved words like "User")
-    const quotedTable = `"${table}"`;
-
-    // ✅ Ensure `tenant_id` is always stored (renamed from `tenant`)
+    // ✅ Store tenant_id
     record.tenant_id = tenantId;
 
     await client.query("BEGIN");
 
-    // ✅ Ensure tenant_id column exists dynamically
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = '${table.toLowerCase()}' 
-          AND column_name = 'tenant_id'
-        ) THEN
-          EXECUTE format('ALTER TABLE %I ADD COLUMN tenant_id VARCHAR(255);', '${table}');
-        END IF;
-      END$$;
-    `);
-
-    // ✅ Ensure sync_token table exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sync_token (
-        id SERIAL PRIMARY KEY,
-        current_token BIGINT DEFAULT 0
-      );
-    `);
-
-    // ✅ Ensure at least one token row exists
-    await client.query(`
-      INSERT INTO sync_token (id, current_token)
-      VALUES (1, 0)
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
-    // ✅ Get and increment sync token
+    // ✅ Get sync token
     const { rows: tokenRows } = await client.query(
       `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
     );
     const syncToken = tokenRows[0].current_token;
     record.sync_token = syncToken;
 
-    // ✅ Prepare query
+    // ✅ Prepare insert/update
     const columns = Object.keys(record);
     const values = Object.values(record);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
-    const quotedColumns = columns.map(col => `"${col}"`).join(",");
+    const quotedColumns = columns.map(c => `"${c}"`).join(",");
     const updates = columns
-      .filter(col => col !== "global_id")
-      .map(col => `"${col}" = EXCLUDED."${col}"`)
+      .filter(c => c !== "global_id")
+      .map(c => `"${c}" = EXCLUDED."${c}"`)
       .join(", ");
 
     const query = `
-      INSERT INTO ${quotedTable} (${quotedColumns})
+      INSERT INTO "${table}" (${quotedColumns})
       VALUES (${placeholders})
       ON CONFLICT ("global_id")
       DO UPDATE SET ${updates}
@@ -315,14 +282,10 @@ const upsertRecord = async (table, record, tenantId) => {
     await client.query("COMMIT");
 
     return rows[0];
-  } catch (error) {
+  } catch (err) {
     await client.query("ROLLBACK");
-    console.error("❌ Error in upsertRecord:", {
-      table,
-      record,
-      error: error.message
-    });
-    throw error;
+    console.error("❌ Error in upsertRecord:", { table, record, error: err.message });
+    throw err;
   } finally {
     client.release();
   }
