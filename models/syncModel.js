@@ -351,7 +351,7 @@ const safeUpsertRecord = async (table, record, tenant) => {
 // 🔹 Log sync event
 const logSync = async (device_id, tenant, status) => {
   await pool.query(
-    `INSERT INTO sync_log (device_id, tenant, status, synced_at) VALUES ($1, $2, $3, NOW())`,
+    `INSERT INTO sync_log (device_id, tenant_id, status, synced_at) VALUES ($1, $2, $3, NOW())`,
     [device_id, tenant, status]
   );
 };
