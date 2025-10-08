@@ -658,11 +658,11 @@ exports.syncData = async (req, res) => {
       }
     }
 
-    // If no data was pulled, keep the same token (don't skip numbers)
-    if (newSyncToken === sinceToken) {
-      const dbToken = await getCurrentSyncToken(); // optional safety check
-      newSyncToken = Math.max(newSyncToken, dbToken);
-    }
+    // // If no data was pulled, keep the same token (don't skip numbers)
+    // if (newSyncToken === sinceToken) {
+    //   const dbToken = await getCurrentSyncToken(); // optional safety check
+    //   newSyncToken = Math.max(newSyncToken, dbToken);
+    // }
 
     // Step 6️⃣ — Send FCM notifications (excluding sender)
     if (hasChangesToPush) {
