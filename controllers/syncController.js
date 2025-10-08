@@ -646,16 +646,55 @@ exports.syncData = async (req, res) => {
 
     // ✅ Step 5️⃣ — Correct sync token calculation (FIXED)
     // Instead of using getCurrentSyncToken(), we calculate based on actual records sent
+    // let newSyncToken = sinceToken;
+
+    // for (const table of Object.keys(pullChanges)) {
+    //   const tableRows = pullChanges[table];
+    //   if (tableRows.length > 0) {
+    //     const maxTokenInTable = Math.max(...tableRows.map(r => r.sync_token));
+    //     if (maxTokenInTable > newSyncToken) {
+    //       newSyncToken = maxTokenInTable;
+    //     }
+    //   }
+    // }
+
     let newSyncToken = sinceToken;
 
-    for (const table of Object.keys(pullChanges)) {
-      const tableRows = pullChanges[table];
-      if (tableRows.length > 0) {
-        const maxTokenInTable = Math.max(...tableRows.map(r => r.sync_token));
-        if (maxTokenInTable > newSyncToken) {
-          newSyncToken = maxTokenInTable;
+    // Strategy 1: Use max token from pulled changes
+    if (hasChangesToPull) {
+      for (const table of Object.keys(pullChanges)) {
+        const tableRows = pullChanges[table];
+        if (tableRows.length > 0) {
+          const maxTokenInTable = Math.max(...tableRows.map(r => r.sync_token || 0));
+          if (maxTokenInTable > newSyncToken) {
+            newSyncToken = maxTokenInTable;
+          }
         }
       }
+      console.log(`🔢 Token advanced via pulled changes: ${sinceToken} → ${newSyncToken}`);
+    }
+    // Strategy 2: If we pushed changes but pulled nothing, increment token
+    else if (hasChangesToPush && !hasChangesToPull) {
+      newSyncToken = sinceToken + 1;
+      console.log(`🔢 Token incremented (push-only sync): ${sinceToken} → ${newSyncToken}`);
+    }
+    // Strategy 3: If no changes at all, get current max token from DB
+    else if (!hasChangesToPush && !hasChangesToPull) {
+      const dbToken = await getCurrentSyncToken();
+      if (dbToken > sinceToken) {
+        newSyncToken = dbToken;
+        console.log(`🔢 Token updated from DB: ${sinceToken} → ${newSyncToken}`);
+      } else {
+        // No changes anywhere, but we still need to advance token to prevent loops
+        newSyncToken = sinceToken + 1;
+        console.log(`🔢 Token force-incremented (no changes): ${sinceToken} → ${newSyncToken}`);
+      }
+    }
+
+    // Ensure token always moves forward
+    if (newSyncToken <= sinceToken) {
+      console.warn(`⚠️ Token not advancing (${newSyncToken} <= ${sinceToken}), forcing increment`);
+      newSyncToken = sinceToken + 1;
     }
 
     // If no data was pulled, keep the same token (don't skip numbers)
@@ -664,6 +703,13 @@ exports.syncData = async (req, res) => {
       newSyncToken = Math.max(newSyncToken, dbToken);
     }
 
+
+
+
+
+
+
+    
     // Step 6️⃣ — Send FCM notifications (excluding sender)
     if (hasChangesToPush) {
       const fcmResult = await pool.query(
