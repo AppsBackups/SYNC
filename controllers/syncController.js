@@ -433,6 +433,129 @@ const tableListpull = [
 // =============================================================
 // 🔄 SYNC DATA
 // =============================================================
+// exports.syncData = async (req, res) => {
+//   const { deviceId, changes, tenantId, fcmtoken, devicename } = req.body;
+//   const sinceToken = req.body.since_token ?? req.body.sync_token;
+
+//   if (!deviceId || !tenantId || sinceToken === undefined || sinceToken === null) {
+//     return res.status(400).json({ error: "Missing required fields: deviceId, tenantId, or sync_token" });
+//   }
+
+//   console.log("🔄 Sync request received:", { deviceId, tenantId, sinceToken });
+
+//   // Step 0️⃣ — Save/Update device info
+//   await pool.query(`
+//     INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
+//     VALUES ($1, $2, $3, $4)
+//     ON CONFLICT (deviceId)
+//     DO UPDATE SET
+//       fcmtoken = EXCLUDED.fcmtoken,
+//       tenantId = EXCLUDED.tenantId,
+//       devicename = EXCLUDED.devicename,
+//       updated_at = NOW()
+//   `, [deviceId, fcmtoken, tenantId, devicename]);
+
+//   // Step 1️⃣ — Validate tenant plan
+//   const planResult = await pool.query(
+//     `SELECT purchase_date FROM user_plans WHERE teanut = $1 ORDER BY purchase_date DESC LIMIT 1`,
+//     [tenantId]
+//   );
+
+//   if (!planResult.rows.length) {
+//     return res.status(403).json({ message: "No active plan found for this tenant." });
+//   }
+
+//   const purchaseDate = new Date(planResult.rows[0].purchase_date);
+//   const expiryDate = new Date(purchaseDate);
+//   expiryDate.setMonth(expiryDate.getMonth() + 1);
+
+//   if (new Date() > expiryDate) {
+//     return res.status(403).json({ message: "Plan expired. Please renew to continue syncing." });
+//   }
+
+//   const pullChanges = {};
+//   let hasChangesToPush = false;
+
+//   try {
+//     // Step 2️⃣ — Get paired devices for the same tenant
+//     const pairedDeviceIds = await getPairedDeviceIds(tenantId);
+//     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
+
+//     if (otherPairedDevices.length === 0) {
+//       return res.status(200).json({
+//         message: "No paired devices found. Sync skipped.",
+//         sync_token: sinceToken,
+//         changes: {}
+//       });
+//     }
+
+//     // Step 3️⃣ — Push local changes to server
+//     for (const table of tableList) {
+//       const incomingRecords = changes?.[table];
+//       if (!Array.isArray(incomingRecords) || incomingRecords.length === 0) continue;
+
+//       hasChangesToPush = true;
+//       const updatedGlobalIds = [];
+
+//       for (const record of incomingRecords) {
+//         try {
+//           delete record.sync_token;
+//           // record.device_id = deviceId;
+//           const updated = await safeUpsertRecord(table, record, tenantId,deviceId);
+//           if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
+//         } catch (err) {
+//           console.error(`❌ Error in ${table}:`, err.message);
+//         }
+//       }
+
+//       await logSync(deviceId, tenantId, "push");
+//       console.log(`📤 ${updatedGlobalIds.length} records pushed to ${table}`);
+//     }
+
+//     // Step 4️⃣ — Pull new changes from other paired devices (same tenant only)
+//     for (const table of tableListpull) {
+//       const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId , deviceId);
+//       if (rows.length > 0) {
+//         pullChanges[table] = rows;
+//         await logSync(deviceId, tenantId, "pull");
+//         console.log(`📥 Pulled ${rows.length} records from ${table}`);
+//       }
+//     }
+
+//     // Step 5️⃣ — Get latest sync token
+//     const newSyncToken = await getCurrentSyncToken();
+
+//     // Step 6️⃣ — Send FCM notifications if changes were pushed
+//     if (hasChangesToPush) {
+//       const fcmResult = await pool.query(
+//         `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
+//         [tenantId, deviceId]
+//       );
+
+//       const tokens = fcmResult.rows.map(r => r.fcmtoken);
+//       console.log("🚀 Sending FCM to devices:", tokens, "excluding:", deviceId);
+      
+
+//       if (tokens.length > 0) {
+//         const message = {
+//           data: { type: "SYNC_TRIGGER", triggeredBy: deviceId }
+//         };
+//         await Promise.all(tokens.map(token => admin.messaging().send({ ...message, token })));
+//         console.log(`📲 Sent sync notifications to ${tokens.length} devices`);
+//       }
+//     }
+
+//     return res.status(200).json({
+//       sync_token: newSyncToken,
+//       changes: pullChanges
+//     });
+
+//   } catch (err) {
+//     console.error("❌ syncData error:", err);
+//     return res.status(500).json({ error: "Sync failed. Check server logs." });
+//   }
+// };
+
 exports.syncData = async (req, res) => {
   const { deviceId, changes, tenantId, fcmtoken, devicename } = req.body;
   const sinceToken = req.body.since_token ?? req.body.sync_token;
@@ -443,7 +566,7 @@ exports.syncData = async (req, res) => {
 
   console.log("🔄 Sync request received:", { deviceId, tenantId, sinceToken });
 
-  // Step 0️⃣ — Save/Update device info
+  // Step 0️⃣ — Save or update device info
   await pool.query(`
     INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
     VALUES ($1, $2, $3, $4)
@@ -477,7 +600,7 @@ exports.syncData = async (req, res) => {
   let hasChangesToPush = false;
 
   try {
-    // Step 2️⃣ — Get paired devices for the same tenant
+    // Step 2️⃣ — Get paired devices
     const pairedDeviceIds = await getPairedDeviceIds(tenantId);
     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
 
@@ -489,7 +612,7 @@ exports.syncData = async (req, res) => {
       });
     }
 
-    // Step 3️⃣ — Push local changes to server
+    // Step 3️⃣ — Push local changes from this device
     for (const table of tableList) {
       const incomingRecords = changes?.[table];
       if (!Array.isArray(incomingRecords) || incomingRecords.length === 0) continue;
@@ -500,8 +623,7 @@ exports.syncData = async (req, res) => {
       for (const record of incomingRecords) {
         try {
           delete record.sync_token;
-          // record.device_id = deviceId;
-          const updated = await safeUpsertRecord(table, record, tenantId,deviceId);
+          const updated = await safeUpsertRecord(table, record, tenantId, deviceId);
           if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
         } catch (err) {
           console.error(`❌ Error in ${table}:`, err.message);
@@ -512,9 +634,9 @@ exports.syncData = async (req, res) => {
       console.log(`📤 ${updatedGlobalIds.length} records pushed to ${table}`);
     }
 
-    // Step 4️⃣ — Pull new changes from other paired devices (same tenant only)
+    // Step 4️⃣ — Pull new changes from other devices
     for (const table of tableListpull) {
-      const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId , deviceId);
+      const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId, deviceId);
       if (rows.length > 0) {
         pullChanges[table] = rows;
         await logSync(deviceId, tenantId, "pull");
@@ -522,10 +644,27 @@ exports.syncData = async (req, res) => {
       }
     }
 
-    // Step 5️⃣ — Get latest sync token
-    const newSyncToken = await getCurrentSyncToken();
+    // ✅ Step 5️⃣ — Correct sync token calculation (FIXED)
+    // Instead of using getCurrentSyncToken(), we calculate based on actual records sent
+    let newSyncToken = sinceToken;
 
-    // Step 6️⃣ — Send FCM notifications if changes were pushed
+    for (const table of Object.keys(pullChanges)) {
+      const tableRows = pullChanges[table];
+      if (tableRows.length > 0) {
+        const maxTokenInTable = Math.max(...tableRows.map(r => r.sync_token));
+        if (maxTokenInTable > newSyncToken) {
+          newSyncToken = maxTokenInTable;
+        }
+      }
+    }
+
+    // If no data was pulled, keep the same token (don't skip numbers)
+    if (newSyncToken === sinceToken) {
+      const dbToken = await getCurrentSyncToken(); // optional safety check
+      newSyncToken = Math.max(newSyncToken, dbToken);
+    }
+
+    // Step 6️⃣ — Send FCM notifications (excluding sender)
     if (hasChangesToPush) {
       const fcmResult = await pool.query(
         `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
@@ -533,6 +672,8 @@ exports.syncData = async (req, res) => {
       );
 
       const tokens = fcmResult.rows.map(r => r.fcmtoken);
+      console.log("🚀 Sending FCM to devices:", tokens, "excluding:", deviceId);
+
       if (tokens.length > 0) {
         const message = {
           data: { type: "SYNC_TRIGGER", triggeredBy: deviceId }
@@ -542,6 +683,7 @@ exports.syncData = async (req, res) => {
       }
     }
 
+    // Step 7️⃣ — Send response
     return res.status(200).json({
       sync_token: newSyncToken,
       changes: pullChanges
@@ -552,6 +694,7 @@ exports.syncData = async (req, res) => {
     return res.status(500).json({ error: "Sync failed. Check server logs." });
   }
 };
+
 
 // =============================================================
 // 📋 GET SYNC LOGS
