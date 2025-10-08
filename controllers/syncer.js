@@ -127,7 +127,8 @@ exports.syncData = async (req, res) => {
 
       // Build the INSERT query
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-      const columnNames = columns.join(', ');
+    //   const columnNames = columns.join(', ');
+      const quotedColumns = columns.map(c => `"${c}"`).join(",");
       
       // Build the ON CONFLICT UPDATE clause
       const updateClause = columns
@@ -136,7 +137,7 @@ exports.syncData = async (req, res) => {
         .join(', ');
 
       const query = `
-        INSERT INTO ${table} (${columnNames})
+        INSERT INTO ${table} (${quotedColumns})
         VALUES (${placeholders})
         ON CONFLICT (global_id)
         DO UPDATE SET ${updateClause}
