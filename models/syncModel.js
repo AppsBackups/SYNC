@@ -49,7 +49,7 @@ const pool = require("../config/db");
 
 
 
-// 🔹 Get all records from a table since a sync token
+
 const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) => {
   const query = `
     SELECT * FROM "${table}"
@@ -59,8 +59,15 @@ const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) =
     ORDER BY sync_token ASC;
   `;
   const { rows } = await pool.query(query, [sinceToken, tenant, deviceId]);
+  const { ro: tokenRows } = await pool.query(
+    `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
+  );
+  const newSyncToken = tokenRows[0].current_token;
   return rows;
 };
+
+
+
 
 
 // 🔹 Soft delete record (sets deleted = true)

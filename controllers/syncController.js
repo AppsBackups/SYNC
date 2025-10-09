@@ -119,20 +119,6 @@ exports.syncData = async (req, res) => {
       }
     }
 
-    // ✅ Step 5️⃣ — Correct sync token calculation (FIXED)
-    // Instead of using getCurrentSyncToken(), we calculate based on actual records sent
-    // let newSyncToken = sinceToken;
-
-    // for (const table of Object.keys(pullChanges)) {
-    //   const tableRows = pullChanges[table];
-    //   if (tableRows.length > 0) {
-    //     const maxTokenInTable = Math.max(...tableRows.map(r => r.sync_token));
-    //     if (maxTokenInTable > newSyncToken) {
-    //       newSyncToken = maxTokenInTable;
-    //     }
-    //   }
-    // }
-
 let newSyncToken = sinceToken;
 
 // 1️⃣ Check pulled data from each table
