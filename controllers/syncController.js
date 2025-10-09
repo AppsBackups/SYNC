@@ -138,7 +138,7 @@ for (const table of Object.keys(pullChanges)) {
 console.log("FROM TABLES:", newSyncToken);
 
 // 2️⃣ Get current global token
-let finalToken = 0 ;
+let finalToken = newSyncToken ;
 
 // 3️⃣ Token update decision logic
 
@@ -157,7 +157,7 @@ if (hasChangesToPush) {
   // ✅ Only pull happened
   const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
 let dbToken = dbRows[0]?.current_token ?? 0;
-console.log("FROM DB:", dbToken);
+// console.log("FROM DB:", dbToken);
   finalToken = dbToken;
 
   const { rows } = await pool.query(`
