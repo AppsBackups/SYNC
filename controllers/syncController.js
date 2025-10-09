@@ -138,12 +138,10 @@ for (const table of Object.keys(pullChanges)) {
 console.log("FROM TABLES:", newSyncToken);
 
 // 2️⃣ Get current global token
-const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
-let dbToken = dbRows[0]?.current_token ?? 0;
-console.log("FROM DB:", dbToken);
+let finalToken = 0 ;
 
 // 3️⃣ Token update decision logic
-let finalToken = dbToken;
+
 
 if (hasChangesToPush) {
   // ✅ Push happened (covers Push+Pull and Push only)
@@ -157,6 +155,11 @@ if (hasChangesToPush) {
 
 } else if (hasChangesToPull) {
   // ✅ Only pull happened
+  const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
+let dbToken = dbRows[0]?.current_token ?? 0;
+console.log("FROM DB:", dbToken);
+  finalToken = dbToken;
+
   const { rows } = await pool.query(`
     UPDATE sync_token 
     SET current_token = current_token + 1 
@@ -166,8 +169,8 @@ if (hasChangesToPush) {
   console.log("✅ Pull detected — incremented global token:", finalToken);
 
 } else {
-  // ❌ Neither push nor pull → do NOT increment
-  finalToken = dbToken;
+
+  // ✅ Only pull happened
   console.log("⚪ No push or pull — global token unchanged:", finalToken);
 }
 
