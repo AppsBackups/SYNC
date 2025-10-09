@@ -51,6 +51,7 @@ const pool = require("../config/db");
 
 
 const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) => {
+  // Step 1: Get new records from other devices
   const query = `
     SELECT * FROM "${table}"
     WHERE sync_token > $1
@@ -59,12 +60,17 @@ const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) =
     ORDER BY sync_token ASC;
   `;
   const { rows } = await pool.query(query, [sinceToken, tenant, deviceId]);
-  const { ro: tokenRows } = await pool.query(
+
+  // Step 2: Safely increment sync token (same as in push)
+  const { rows: tokenRows } = await pool.query(
     `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
   );
-  const newSyncToken = tokenRows[0].current_token;
+
+  const newSyncToken = tokenRows?.[0]?.current_token ?? sinceToken;
+
   return rows;
 };
+
 
 
 
