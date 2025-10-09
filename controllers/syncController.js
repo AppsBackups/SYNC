@@ -125,18 +125,18 @@ exports.syncData = async (req, res) => {
 
 
 let newSyncToken = sinceToken;
-const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
-let dbToken = dbRows[0]?.current_token ?? 0;
 
-  let finalToken = dbToken;
+
+  
 
 if (hasChangesToPush) {
   
-  // console.log("✅ Push detected — no incremented token:", finalToken);
 
 } else if (hasChangesToPull) {
   // ✅ Only pull happened
-  
+  const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
+let dbToken = dbRows[0]?.current_token ?? 0;
+  let finalToken = dbToken;
 
   const { rows } = await pool.query(`
     UPDATE sync_token 
@@ -145,18 +145,16 @@ if (hasChangesToPush) {
   `);
   finalToken = rows[0].current_token;
   console.log("✅ Pull detected — incremented global token:", finalToken);
+  newSyncToken = finalToken;
 
 } else {
 
   // ✅ Only pull happened
-  console.log("⚪ No push or pull — global token unchanged:", finalToken);
+  console.log("⚪ No push or pull — global token unchanged:", newSyncToken);
 }
 
-newSyncToken = finalToken;
 
 
-
-   
 
     // Step 6️⃣ — Send FCM notifications (excluding sender)
     if (hasChangesToPush) {
