@@ -123,42 +123,20 @@ exports.syncData = async (req, res) => {
       }
     }
 
-// 1️⃣ Determine latest token from pulled data
+
 let newSyncToken = sinceToken;
-for (const table of Object.keys(pullChanges)) {
-  const tableRows = pullChanges[table];
-  if (tableRows.length > 0) {
-    const maxTokenInTable = Math.max(...tableRows.map(r => r.sync_token));
-    if (maxTokenInTable > newSyncToken) {
-      newSyncToken = maxTokenInTable;
-    }
-  }
-}
+const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
+let dbToken = dbRows[0]?.current_token ?? 0;
 
-console.log("FROM TABLES:", newSyncToken);
-
-// 2️⃣ Get current global token
-let finalToken = newSyncToken ;
-
-// 3️⃣ Token update decision logic
-
+  let finalToken = dbToken;
 
 if (hasChangesToPush) {
-  // ✅ Push happened (covers Push+Pull and Push only)
-  // const { rows } = await pool.query(`
-  //   UPDATE sync_token 
-  //   SET current_token = current_token + 1 
-  //   RETURNING current_token;
-  // `);
-  // finalToken = rows[0].current_token;
-  console.log("✅ Push detected — no incremented token:", finalToken);
+  
+  // console.log("✅ Push detected — no incremented token:", finalToken);
 
 } else if (hasChangesToPull) {
   // ✅ Only pull happened
-  const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
-let dbToken = dbRows[0]?.current_token ?? 0;
-// console.log("FROM DB:", dbToken);
-  finalToken = dbToken;
+  
 
   const { rows } = await pool.query(`
     UPDATE sync_token 
