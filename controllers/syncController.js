@@ -130,7 +130,9 @@ let newSyncToken = sinceToken;
   
 
 if (hasChangesToPush) {
-  
+  const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
+let dbToken = dbRows[0]?.current_token ?? 0;
+newSyncToken = dbToken;
 
 } else if (hasChangesToPull) {
   // ✅ Only pull happened
