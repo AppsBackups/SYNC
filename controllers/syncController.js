@@ -39,7 +39,7 @@ exports.syncData = async (req, res) => {
     return res.status(400).json({ error: "Missing required fields: deviceId, tenantId, or sync_token" });
   }
 
-  console.log("🔄 Sync request received:", { deviceId, tenantId, sinceToken });
+  console.log("🔹 [SYNC STARTED]", { deviceId, tenantId, sinceToken });
 
   // Step 0️⃣ — Save or update device info
   await pool.query(`
@@ -76,7 +76,7 @@ exports.syncData = async (req, res) => {
 
   try {
     // Step 2️⃣ — Get paired devices
-    const pairedDeviceIds = await getPairedDeviceIds(tenantId);
+    const pairedDeviceIds = await getPairedDeviceIds(deviceId,tenantId);
     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
 
     if (otherPairedDevices.length === 0) {
@@ -109,19 +109,22 @@ exports.syncData = async (req, res) => {
       console.log(`📤 ${updatedGlobalIds.length} records pushed to ${table}`);
     }
 
-    // Step 4️⃣ — Pull new changes from other devices
+    //pull
+    let hasChangesToPull = false;
+
     for (const table of tableListpull) {
       const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId, deviceId);
       if (rows.length > 0) {
         pullChanges[table] = rows;
+        hasChangesToPull = true;
+
         await logSync(deviceId, tenantId, "pull");
         console.log(`📥 Pulled ${rows.length} records from ${table}`);
       }
     }
 
+// 1️⃣ Determine latest token from pulled data
 let newSyncToken = sinceToken;
-
-// 1️⃣ Check pulled data from each table
 for (const table of Object.keys(pullChanges)) {
   const tableRows = pullChanges[table];
   if (tableRows.length > 0) {
@@ -131,22 +134,48 @@ for (const table of Object.keys(pullChanges)) {
     }
   }
 }
-console.log("FROM TABLES :" ,newSyncToken);
 
-// 2️⃣ Always confirm with the latest DB token
-const dbToken = await getCurrentSyncToken();
-newSyncToken = dbToken ;
-console.log("From Db:",newSyncToken);
+console.log("FROM TABLES:", newSyncToken);
 
-// // 3️⃣ Choose the highest (safest) value
-// newSyncToken = Math.max(newSyncToken, dbToken);
+// 2️⃣ Get current global token
+const { rows: dbRows } = await pool.query(`SELECT current_token FROM sync_token LIMIT 1`);
+let dbToken = dbRows[0]?.current_token ?? 0;
+console.log("FROM DB:", dbToken);
+
+// 3️⃣ Token update decision logic
+let finalToken = dbToken;
+
+if (hasChangesToPush) {
+  // ✅ Push happened (covers Push+Pull and Push only)
+  const { rows } = await pool.query(`
+    UPDATE sync_token 
+    SET current_token = current_token + 1 
+    RETURNING current_token;
+  `);
+  finalToken = rows[0].current_token;
+  console.log("✅ Push detected — incremented global token:", finalToken);
+
+} else if (hasChangesToPull) {
+  // ✅ Only pull happened
+  const { rows } = await pool.query(`
+    UPDATE sync_token 
+    SET current_token = current_token + 1 
+    RETURNING current_token;
+  `);
+  finalToken = rows[0].current_token;
+  console.log("✅ Pull detected — incremented global token:", finalToken);
+
+} else {
+  // ❌ Neither push nor pull → do NOT increment
+  finalToken = dbToken;
+  console.log("⚪ No push or pull — global token unchanged:", finalToken);
+}
+
+newSyncToken = finalToken;
 
 
-    // If no data was pulled, keep the same token (don't skip numbers)
-    // if (newSyncToken === sinceToken) {
-    //   const dbToken = await getCurrentSyncToken(); // optional safety check
-    //   newSyncToken = Math.max(newSyncToken, dbToken);
-    // }
+
+   
 
     // Step 6️⃣ — Send FCM notifications (excluding sender)
     if (hasChangesToPush) {
@@ -166,6 +195,7 @@ console.log("From Db:",newSyncToken);
         console.log(`📲 Sent sync notifications to ${tokens.length} devices`);
       }
     }
+    console.log("✅ [SYNC COMPLETED]");
 
     // Step 7️⃣ — Send response
     return res.status(200).json({

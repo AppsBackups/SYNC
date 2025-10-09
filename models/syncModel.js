@@ -61,12 +61,6 @@ const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) =
   `;
   const { rows } = await pool.query(query, [sinceToken, tenant, deviceId]);
 
-  // Step 2: Safely increment sync token (same as in push)
-  const { rows: tokenRows } = await pool.query(
-    `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
-  );
-
-  const newSyncToken = tokenRows?.[0]?.current_token ?? sinceToken;
 
   return rows;
 };
