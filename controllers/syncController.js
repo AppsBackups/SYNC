@@ -145,17 +145,19 @@ console.log("FROM DB:", dbToken);
 // 3️⃣ Token update decision logic
 let finalToken = dbToken;
 
-if (hasChangesToPush) {
-  // ✅ Push happened (covers Push+Pull and Push only)
-  const { rows } = await pool.query(`
-    UPDATE sync_token 
-    SET current_token = current_token + 1 
-    RETURNING current_token;
-  `);
-  finalToken = rows[0].current_token;
-  console.log("✅ Push detected — incremented global token:", finalToken);
+// if (hasChangesToPush) {
+//   // ✅ Push happened (covers Push+Pull and Push only)
+//   const { rows } = await pool.query(`
+//     UPDATE sync_token 
+//     SET current_token = current_token + 1 
+//     RETURNING current_token;
+//   `);
+//   finalToken = rows[0].current_token;
+//   console.log("✅ Push detected — incremented global token:", finalToken);
 
-} else if (hasChangesToPull) {
+// } else 
+  
+if (hasChangesToPull) {
   // ✅ Only pull happened
   const { rows } = await pool.query(`
     UPDATE sync_token 
