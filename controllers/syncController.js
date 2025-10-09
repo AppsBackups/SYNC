@@ -145,19 +145,22 @@ for (const table of Object.keys(pullChanges)) {
     }
   }
 }
+console.log("FROM TABLES :" ,newSyncToken);
 
 // 2️⃣ Always confirm with the latest DB token
 const dbToken = await getCurrentSyncToken();
+newSyncToken = dbToken ;
+console.log("From Db:",newSyncToken);
 
-// 3️⃣ Choose the highest (safest) value
-newSyncToken = Math.max(newSyncToken, dbToken);
+// // 3️⃣ Choose the highest (safest) value
+// newSyncToken = Math.max(newSyncToken, dbToken);
 
 
     // If no data was pulled, keep the same token (don't skip numbers)
-    if (newSyncToken === sinceToken) {
-      const dbToken = await getCurrentSyncToken(); // optional safety check
-      newSyncToken = Math.max(newSyncToken, dbToken);
-    }
+    // if (newSyncToken === sinceToken) {
+    //   const dbToken = await getCurrentSyncToken(); // optional safety check
+    //   newSyncToken = Math.max(newSyncToken, dbToken);
+    // }
 
     // Step 6️⃣ — Send FCM notifications (excluding sender)
     if (hasChangesToPush) {
@@ -167,7 +170,7 @@ newSyncToken = Math.max(newSyncToken, dbToken);
       );
 
       const tokens = fcmResult.rows.map(r => r.fcmtoken);
-      console.log("🚀 Sending FCM to devices:", tokens, "excluding:", deviceId);
+      // console.log("🚀 Sending FCM to devices:", tokens, "excluding:", deviceId);
 
       if (tokens.length > 0) {
         const message = {
