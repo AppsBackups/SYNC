@@ -138,8 +138,8 @@ const upsertRecord = async (table, record, tenantId) => {
       `SELECT sync_token FROM "${table}" WHERE global_id = $1`,
       [record.global_id]
     );
-    
-    console.log("REcord:"+ existingRows);
+
+    console.log("REcord:"+ existingRows[0].sync_Token);
 
     const existingToken = existingRows.length > 0 ? existingRows[0].sync_token : null;
     console.log(existingToken)

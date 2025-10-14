@@ -97,7 +97,7 @@ exports.syncData = async (req, res) => {
 
       for (const record of incomingRecords) {
         try {
-          delete record.sync_token;
+          
           const updated = await safeUpsertRecord(table, record, tenantId, deviceId);
           if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
         } catch (err) {
