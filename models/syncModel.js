@@ -121,21 +121,19 @@ const safeUpsertRecord = async (table, record, tenant ,deviceId) => {
 
 
 
-
 const upsertRecord = async (table, record, tenantId) => {
   const client = await pool.connect();
 
   try {
     if (!table || !record || !record.global_id) {
-      throw new Error("Invalid table or record");
+      console.warn("⚠️ Skipped record: Missing table or global_id", { table, record });
+      return null; // skip record silently
     }
 
-    
     record.tenant_id = tenantId;
-
     await client.query("BEGIN");
 
-    
+    // 🔍 Check existing sync_token
     const { rows: existingRows } = await client.query(
       `SELECT sync_token FROM "${table}" WHERE global_id = $1`,
       [record.global_id]
@@ -143,21 +141,23 @@ const upsertRecord = async (table, record, tenantId) => {
 
     const existingToken = existingRows.length > 0 ? existingRows[0].sync_token : null;
 
-  
+    // 🧠 Skip if record is outdated
     if (existingToken !== null && record.sync_token < existingToken) {
+      console.warn(
+        `⚠️ Skipped record (Outdated sync_token): client=${record.sync_token}, server=${existingToken}, table=${table}, global_id=${record.global_id}`
+      );
       await client.query("ROLLBACK");
-      throw new Error(`Rejected: Outdated sync_token (client=${record.sync_token}, server=${existingToken})`);
+      return null; // skip this record only
     }
 
-    
+    // 🔄 Get a new sync_token
     const { rows: tokenRows } = await client.query(
       `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
     );
     const newSyncToken = tokenRows[0].current_token;
-
     record.sync_token = newSyncToken;
 
-   
+    // 🏗 Prepare insert or update
     const columns = Object.keys(record);
     const values = Object.values(record);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
@@ -167,7 +167,6 @@ const upsertRecord = async (table, record, tenantId) => {
       .map(c => `"${c}" = EXCLUDED."${c}"`)
       .join(", ");
 
-    
     const query = `
       INSERT INTO "${table}" (${quotedColumns})
       VALUES (${placeholders})
@@ -180,21 +179,24 @@ const upsertRecord = async (table, record, tenantId) => {
     const { rows } = await client.query(query, values);
     await client.query("COMMIT");
 
-    
     if (rows.length === 0) {
-      throw new Error(`No update applied: sync_token was outdated or unchanged.`);
+      console.warn(`⚠️ Skipped record (No update applied): ${record.global_id}`);
+      return null;
     }
 
     return rows[0];
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("❌ Error in upsertRecord:", { table, record, error: err.message });
-    throw err;
+    console.error("❌ Error in upsertRecord:", {
+      table,
+      global_id: record?.global_id,
+      error: err.message,
+    });
+    return null; // skip record and continue
   } finally {
     client.release();
   }
 };
-
 
 
 
