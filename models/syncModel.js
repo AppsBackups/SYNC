@@ -51,7 +51,7 @@ const pool = require("../config/db");
 
 
 const getRecordsSinceFromDevices = async (table, sinceToken, tenant, deviceId) => {
-  // Step 1: Get new records from other devices
+  
   const query = `
     SELECT * FROM "${table}"
     WHERE sync_token > $1
@@ -99,7 +99,7 @@ const deleteRecord = async (table, global_id, tenant) => {
   }
 };
 
-// 🔹 Get current sync token
+
 const getCurrentSyncToken = async () => {
   const { rows } = await pool.query(`SELECT current_token FROM sync_token`);
   return rows[0]?.current_token || 0;
@@ -117,6 +117,11 @@ const safeUpsertRecord = async (table, record, tenant ,deviceId) => {
   }
 };
 
+
+
+
+
+
 const upsertRecord = async (table, record, tenantId) => {
   const client = await pool.connect();
 
@@ -125,19 +130,34 @@ const upsertRecord = async (table, record, tenantId) => {
       throw new Error("Invalid table or record");
     }
 
-    // ✅ Store tenant_id
+    
     record.tenant_id = tenantId;
 
     await client.query("BEGIN");
 
-    // ✅ Get sync token
+    
+    const { rows: existingRows } = await client.query(
+      `SELECT sync_token FROM "${table}" WHERE global_id = $1`,
+      [record.global_id]
+    );
+
+    const existingToken = existingRows.length > 0 ? existingRows[0].sync_token : null;
+
+  
+    if (existingToken !== null && record.sync_token < existingToken) {
+      await client.query("ROLLBACK");
+      throw new Error(`Rejected: Outdated sync_token (client=${record.sync_token}, server=${existingToken})`);
+    }
+
+    
     const { rows: tokenRows } = await client.query(
       `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
     );
-    const syncToken = tokenRows[0].current_token;
-    record.sync_token = syncToken;
+    const newSyncToken = tokenRows[0].current_token;
 
-    // ✅ Prepare insert/update
+    record.sync_token = newSyncToken;
+
+   
     const columns = Object.keys(record);
     const values = Object.values(record);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
@@ -147,16 +167,23 @@ const upsertRecord = async (table, record, tenantId) => {
       .map(c => `"${c}" = EXCLUDED."${c}"`)
       .join(", ");
 
+    
     const query = `
       INSERT INTO "${table}" (${quotedColumns})
       VALUES (${placeholders})
       ON CONFLICT ("global_id")
       DO UPDATE SET ${updates}
+      WHERE "${table}"."sync_token" <= EXCLUDED."sync_token"
       RETURNING *;
     `;
 
     const { rows } = await client.query(query, values);
     await client.query("COMMIT");
+
+    
+    if (rows.length === 0) {
+      throw new Error(`No update applied: sync_token was outdated or unchanged.`);
+    }
 
     return rows[0];
   } catch (err) {
@@ -168,7 +195,76 @@ const upsertRecord = async (table, record, tenantId) => {
   }
 };
 
-// 🔹 Log sync event
+
+
+
+
+
+
+
+
+
+// const upsertRecord = async (table, record, tenantId) => {
+//   const client = await pool.connect();
+
+//   try {
+//     if (!table || !record || !record.global_id) {
+//       throw new Error("Invalid table or record");
+//     }
+
+//     // ✅ Store tenant_id
+//     record.tenant_id = tenantId;
+
+//     await client.query("BEGIN");
+
+    
+//     const { rows: tokenRows } = await client.query(
+//       `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
+//     );
+//     const syncToken = tokenRows[0].current_token;
+//     record.sync_token = syncToken;
+
+   
+//     const columns = Object.keys(record);
+//     const values = Object.values(record);
+//     const placeholders = columns.map((_, i) => `$${i + 1}`).join(",");
+//     const quotedColumns = columns.map(c => `"${c}"`).join(",");
+//     const updates = columns
+//       .filter(c => c !== "global_id")
+//       .map(c => `"${c}" = EXCLUDED."${c}"`)
+//       .join(", ");
+
+//     const query = `
+//       INSERT INTO "${table}" (${quotedColumns})
+//       VALUES (${placeholders})
+//       ON CONFLICT ("global_id")
+//       DO UPDATE SET ${updates}
+//       RETURNING *;
+//     `;
+
+//     const { rows } = await client.query(query, values);
+//     await client.query("COMMIT");
+
+//     return rows[0];
+//   } catch (err) {
+//     await client.query("ROLLBACK");
+//     console.error("❌ Error in upsertRecord:", { table, record, error: err.message });
+//     throw err;
+//   } finally {
+//     client.release();
+//   }
+// };
+
+
+
+
+
+
+
+
+
+
+
 const logSync = async (device_id, tenant, status) => {
   await pool.query(
     `INSERT INTO sync_log (device_id, tenant_id, status, synced_at) VALUES ($1, $2, $3, NOW())`,

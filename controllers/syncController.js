@@ -79,13 +79,13 @@ exports.syncData = async (req, res) => {
     const pairedDeviceIds = await getPairedDeviceIds(deviceId,tenantId);
     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
 
-    if (otherPairedDevices.length === 0) {
-      return res.status(200).json({
-        message: "No paired devices found. Sync skipped.",
-        sync_token: sinceToken,
-        changes: {}
-      });
-    }
+    // if (otherPairedDevices.length === 0) {
+    //   return res.status(200).json({
+    //     message: "No paired devices found. Sync skipped.",
+    //     sync_token: sinceToken,
+    //     changes: {}
+    //   });
+    // }
 
     // Step 3️⃣ — Push local changes from this device
     for (const table of tableList) {
