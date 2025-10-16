@@ -133,20 +133,16 @@ const upsertRecord = async (table, record, tenantId) => {
     record.tenant_id = tenantId;
     await client.query("BEGIN");
 
+    // 🔍 Check existing sync_token
     const { rows: existingRows } = await client.query(
-  `SELECT sync_token FROM "${table}" WHERE global_id = $1`,
-  [record.global_id]
-);
+      `SELECT sync_token FROM "${table}" WHERE global_id = $1`,
+      [record.global_id]
+    );
 
-let existingToken = null;
+    // console.log("REcord:"+ existingRows[0].sync_token);
 
-if (existingRows.length > 0) {
-  existingToken = existingRows[0].sync_token;
-  console.log(`Existing sync_token for ${table}:`, existingToken);
-} else {
-  console.log(`No existing record found in ${table} for global_id=${record.global_id}`);
-}
-
+    const existingToken = existingRows.length > 0 ? existingRows[0].sync_token : null;
+    // console.log(existingToken)
 
     // 🧠 Skip if record is outdated
     if (existingToken !== null && record.sync_token < existingToken) {
