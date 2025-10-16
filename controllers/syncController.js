@@ -159,23 +159,73 @@ let dbToken = dbRows[0]?.current_token ?? 0;
 
 
     // Step 6️⃣ — Send FCM notifications (excluding sender)
+    // if (hasChangesToPush) {
+    //   const fcmResult = await pool.query(
+    //     `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
+    //     [tenantId, deviceId]
+    //   );
+
+    //   const tokens = fcmResult.rows.map(r => r.fcmtoken);
+    //   // console.log("🚀 Sending FCM to devices:", tokens, "excluding:", deviceId);
+
+    //   if (tokens.length > 0) {
+    //     const message = {
+    //       data: { type: "SYNC_TRIGGER", triggeredBy: deviceId }
+    //     };
+    //     await Promise.all(tokens.map(token => admin.messaging().send({ ...message, token })));
+    //     console.log(`📲 Sent sync notifications to ${tokens.length} devices`);
+    //   }
+    // }
+
+
     if (hasChangesToPush) {
-      const fcmResult = await pool.query(
-        `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
-        [tenantId, deviceId]
-      );
+  const fcmResult = await pool.query(
+    `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
+    [tenantId, deviceId]
+  );
 
-      const tokens = fcmResult.rows.map(r => r.fcmtoken);
-      // console.log("🚀 Sending FCM to devices:", tokens, "excluding:", deviceId);
+  const tokens = fcmResult.rows.map(r => r.fcmtoken);
 
-      if (tokens.length > 0) {
-        const message = {
-          data: { type: "SYNC_TRIGGER", triggeredBy: deviceId }
-        };
-        await Promise.all(tokens.map(token => admin.messaging().send({ ...message, token })));
-        console.log(`📲 Sent sync notifications to ${tokens.length} devices`);
+  if (tokens.length > 0) {
+    const message = {
+      data: { type: "SYNC_TRIGGER", triggeredBy: deviceId }
+    };
+
+    // Safely send to all tokens
+    const sendPromises = tokens.map(async (token) => {
+      try {
+        // Basic token validation
+        if (!token || token.length < 100) {
+          console.warn(`⚠️ Skipping invalid FCM token: ${token}`);
+          return;
+        }
+
+        await admin.messaging().send({ ...message, token });
+      } catch (err) {
+        // Handle invalid or expired tokens gracefully
+        if (
+          err.code === "messaging/invalid-argument" ||
+          err.code === "messaging/registration-token-not-registered"
+        ) {
+          console.warn(`❌ Removing invalid FCM token: ${token}`);
+          // Optional: cleanup token in DB
+          try {
+            await pool.query(`UPDATE devices SET fcmtoken = NULL WHERE fcmtoken = $1`, [token]);
+          } catch (dbErr) {
+            console.error("⚠️ Failed to remove invalid token from DB:", dbErr.message);
+          }
+        } else {
+          console.error(`⚠️ Failed to send FCM to ${token}:`, err.message);
+        }
       }
-    }
+    });
+
+    // Continue even if some sends fail
+    await Promise.allSettled(sendPromises);
+    console.log(`📲 FCM notifications attempted for ${tokens.length} devices`);
+  }
+}
+
     console.log("✅ [SYNC COMPLETED]");
 
     // Step 7️⃣ — Send response
