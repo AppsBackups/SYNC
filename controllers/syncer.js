@@ -78,11 +78,11 @@ exports.syncData = async (req, res) => {
 
     const { rows } = await pool.query(
         `
-        SELECT sync_token (tenant_id, current_token) 
-        VALUES ($1, 1)
-        ON CONFLICT (tenant_id)
-        DO UPDATE SET current_token = sync_token.current_token + 1 
-        RETURNING current_token
+        INSERT INTO sync_token (tenant_id, current_token)
+    VALUES ($1, 1)
+    ON CONFLICT (tenant_id)
+    DO UPDATE SET current_token = sync_token.current_token + 1
+    RETURNING current_token;
         `,
         [tenantId]
       );
@@ -133,7 +133,7 @@ exports.syncData = async (req, res) => {
   if(hasChangesToPush){    
       const { rows } = await pool.query(
         `
-        SELECT sync_token (tenant_id, current_token) 
+        INSERT sync_token (tenant_id, current_token) 
         VALUES ($1, 1)
         ON CONFLICT (tenant_id)
         DO UPDATE SET current_token = sync_token.current_token  
