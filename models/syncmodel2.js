@@ -114,10 +114,10 @@ const deleteRecord = async (table, global_id, tenantId) => {
 /**
  * 🔹 Safe upsert (skips bad records)
  */
-const safeUpsertRecord = async (table, record, tenantId, deviceId) => {
+const safeUpsertRecord = async (table, record, tenantId, deviceId ,newsyncToken) => {
   try {
     record.device_id = deviceId;
-    return await upsertRecord(table, record, tenantId);
+    return await upsertRecord(table, record, tenantId , newsyncToken);
   } catch (err) {
     console.warn(`⚠️ Skipping record in ${table}:`, err.message);
     return null;
@@ -127,7 +127,7 @@ const safeUpsertRecord = async (table, record, tenantId, deviceId) => {
 /**
  * 🔹 Upsert record (with tenant-specific sync token)
  */
-const upsertRecord = async (table, record, tenantId) => {
+const upsertRecord = async (table, record, tenantId, newsyncToken) => {
   const client = await pool.connect();
 
   try {
@@ -155,8 +155,8 @@ const upsertRecord = async (table, record, tenantId) => {
       return null;
     }
 
-    const newSyncToken = await getNextSyncToken(client, tenantId);
-    record.sync_token = newSyncToken;
+    // ✅ Use provided token, don’t generate a new one here
+    record.sync_token = syncToken;
 
     const columns = Object.keys(record);
     const values = Object.values(record);

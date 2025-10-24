@@ -76,6 +76,18 @@ exports.syncData = async (req, res) => {
     const pairedDeviceIds = await getPairedDeviceIds(deviceId, tenantId);
     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
 
+    const { rows } = await pool.query(
+        `
+        SELECT sync_token (tenant_id, current_token) 
+        VALUES ($1, 1)
+        ON CONFLICT (tenant_id)
+        DO UPDATE SET current_token = sync_token.current_token + 1 
+        RETURNING current_token
+        `,
+        [tenantId]
+      );
+      const newsyncToken = rows[0].current_token;
+
     // Step 3️⃣ — Push local changes
     for (const table of tableList) {
       const incomingRecords = changes?.[table];
@@ -86,7 +98,7 @@ exports.syncData = async (req, res) => {
 
       for (const record of incomingRecords) {
         try {
-          const updated = await safeUpsertRecord(table, record, tenantId, deviceId);
+          const updated = await safeUpsertRecord(table, record, tenantId, deviceId , newsyncToken);
           if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
         } catch (err) {
           console.error(`❌ Error in ${table}:`, err.message);
@@ -113,14 +125,15 @@ exports.syncData = async (req, res) => {
 
     // Step 5️⃣ — Get tenant-specific sync token
     // ✅ UPDATED (use tenant-specific sync_token)
-    const currentToken = await getCurrentSyncToken(tenantId);
-    let newSyncToken = currentToken;
+    // const currentToken = await getCurrentSyncToken(tenantId);
+    // let newSyncToken = currentToken;
+    let newSyncToken = sinceToken;
 
     // If push or pull happened, advance token only for this tenant
   if(hasChangesToPush){    
       const { rows } = await pool.query(
         `
-        INSERT INTO sync_token (tenant_id, current_token) 
+        SELECT sync_token (tenant_id, current_token) 
         VALUES ($1, 1)
         ON CONFLICT (tenant_id)
         DO UPDATE SET current_token = sync_token.current_token  
