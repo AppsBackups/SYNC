@@ -133,27 +133,24 @@ const upsertRecord = async (table, record, tenantId) => {
     record.tenant_id = tenantId;
     await client.query("BEGIN");
 
-    // 🔍 Check existing sync_token
     const { rows: existingRows } = await client.query(
       `SELECT sync_token FROM "${table}" WHERE global_id = $1`,
       [record.global_id]
     );
 
-    // console.log("REcord:"+ existingRows[0].sync_token);
 
     const existingToken = existingRows.length > 0 ? existingRows[0].sync_token : null;
     // console.log(existingToken)
 
-    // 🧠 Skip if record is outdated
     if (existingToken !== null && record.sync_token < existingToken) {
       console.warn(
         `⚠️ Skipped record (Outdated sync_token): client=${record.sync_token}, server=${existingToken}, table=${table}, global_id=${record.global_id}`
       );
       await client.query("ROLLBACK");
-      return null; // skip this record only
+      return null; 
     }
 
-    // 🔄 Get a new sync_token
+    
     const { rows: tokenRows } = await client.query(
       `UPDATE sync_token SET current_token = current_token + 1 RETURNING current_token`
     );

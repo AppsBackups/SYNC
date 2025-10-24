@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const {syncData, getSyncLogs , mannualSync , devices} = require("../controllers/syncController");
+const {syncData, getSyncLogs , mannualSync , devices} = require("../controllers/syncer");
 
 
 router.post("/sync", syncData);
