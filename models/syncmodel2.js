@@ -156,7 +156,7 @@ const upsertRecord = async (table, record, tenantId, newsyncToken) => {
     }
 
     // ✅ Use provided token, don’t generate a new one here
-    record.sync_token = syncToken;
+    record.sync_token = newsyncToken;
 
     const columns = Object.keys(record);
     const values = Object.values(record);

@@ -133,7 +133,7 @@ exports.syncData = async (req, res) => {
   if(hasChangesToPush){    
       const { rows } = await pool.query(
         `
-        INSERT sync_token (tenant_id, current_token) 
+        INSERT INTO sync_token (tenant_id, current_token) 
         VALUES ($1, 1)
         ON CONFLICT (tenant_id)
         DO UPDATE SET current_token = sync_token.current_token  
