@@ -131,17 +131,17 @@ exports.syncData = async (req, res) => {
 
     // If push or pull happened, advance token only for this tenant
   if(hasChangesToPush){    
-      const { rows } = await pool.query(
-        `
-        INSERT INTO sync_token (tenant_id, current_token) 
-        VALUES ($1, 1)
-        ON CONFLICT (tenant_id)
-        DO UPDATE SET current_token = sync_token.current_token  
-        RETURNING current_token
-        `,
-        [tenantId]
-      );
-      newSyncToken = rows[0].current_token;
+      // const { rows } = await pool.query(
+      //   `
+      //   INSERT INTO sync_token (tenant_id, current_token) 
+      //   VALUES ($1, 1)
+      //   ON CONFLICT (tenant_id)
+      //   DO UPDATE SET current_token = sync_token.current_token  
+      //   RETURNING current_token
+      //   `,
+      //   [tenantId]
+      // );
+      // newSyncToken = rows[0].current_token;
       console.log(`🔄 Tenant ${tenantId} sync token updated to ${newSyncToken}`)
 
   }else if(hasChangesToPull) {
