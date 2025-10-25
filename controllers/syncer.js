@@ -28,6 +28,219 @@ const tableListpull = [
   "OrderItems", "MergedTables"
 ];
 
+// exports.syncData = async (req, res) => {
+//   const { deviceId, changes, tenantId, fcmtoken, devicename } = req.body;
+//   const sinceToken = req.body.since_token ?? req.body.sync_token;
+
+//   if (!deviceId || !tenantId || sinceToken === undefined || sinceToken === null) {
+//     return res.status(400).json({ error: "Missing required fields: deviceId, tenantId, or sync_token" });
+//   }
+
+//   console.log("🔹 [SYNC STARTED]", { deviceId, tenantId, sinceToken });
+
+//   // Step 0️⃣ — Save or update device info
+//   await pool.query(`
+//     INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
+//     VALUES ($1, $2, $3, $4)
+//     ON CONFLICT (deviceId)
+//     DO UPDATE SET
+//       fcmtoken = EXCLUDED.fcmtoken,
+//       tenantId = EXCLUDED.tenantId,
+//       devicename = EXCLUDED.devicename,
+//       updated_at = NOW()
+//   `, [deviceId, fcmtoken, tenantId, devicename]);
+
+//   // Step 1️⃣ — Validate tenant plan
+//   const planResult = await pool.query(
+//     `SELECT purchase_date FROM user_plans WHERE teanut = $1 ORDER BY purchase_date DESC LIMIT 1`,
+//     [tenantId]
+//   );
+
+//   if (!planResult.rows.length) {
+//     return res.status(403).json({ message: "No active plan found for this tenant." });
+//   }
+
+//   const purchaseDate = new Date(planResult.rows[0].purchase_date);
+//   const expiryDate = new Date(purchaseDate);
+//   expiryDate.setMonth(expiryDate.getMonth() + 1);
+
+//   if (new Date() > expiryDate) {
+//     return res.status(403).json({ message: "Plan expired. Please renew to continue syncing." });
+//   }
+
+//   const pullChanges = {};
+//   let hasChangesToPush = false;
+
+// try {
+//   // Step 2️⃣ — Get paired devices
+//   const pairedDeviceIds = await getPairedDeviceIds(deviceId, tenantId);
+//   const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
+
+//   let hasChangesToPush = false;
+//   let newsyncToken = null;
+
+//   // Step 3️⃣ — Detect if there are any changes first
+//   for (const table of tableList) {
+//     const incomingRecords = changes?.[table];
+//     if (Array.isArray(incomingRecords) && incomingRecords.length > 0) {
+//       hasChangesToPush = true;
+//       break;
+//     }
+//   }
+
+//   // 🔹 Increment token only if there are actual changes
+//   if (hasChangesToPush) {
+//     const { rows } = await pool.query(
+//       `
+//       INSERT INTO sync_token (tenant_id, current_token)
+//       VALUES ($1, 1)
+//       ON CONFLICT (tenant_id)
+//       DO UPDATE SET current_token = sync_token.current_token + 1
+//       RETURNING current_token;
+//       `,
+//       [tenantId]
+//     );
+//     newsyncToken = rows[0].current_token;
+//     console.log(`🔄 Sync token incremented to ${newsyncToken}`);
+//   } else {
+//     console.log("✅ No local changes detected — sync token not incremented.");
+//   }
+
+//   // Step 4️⃣ — Process and push changes (if any)
+//   if (hasChangesToPush) {
+//     for (const table of tableList) {
+//       const incomingRecords = changes?.[table];
+//       if (!Array.isArray(incomingRecords) || incomingRecords.length === 0) continue;
+
+//       const updatedGlobalIds = [];
+
+//       for (const record of incomingRecords) {
+//         try {
+//           const updated = await safeUpsertRecord(table, record, tenantId, deviceId, newsyncToken);
+//           if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
+//         } catch (err) {
+//           console.error(`❌ Error in ${table}:`, err.message);
+//         }
+//       }
+
+//       await logSync(deviceId, tenantId, "push");
+//       console.log(`📤 ${updatedGlobalIds.length} records pushed to ${table}`);
+//     }
+//   }
+
+// } catch (err) {
+//   console.error("❌ Sync process failed:", err);
+// } 
+
+
+//     // Step 4️⃣ — Pull changes from other devices
+//     let hasChangesToPull = false;
+
+//     for (const table of tableListpull) {
+//       const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId, deviceId);
+//       if (rows.length > 0) {
+//         pullChanges[table] = rows;
+//         hasChangesToPull = true;
+
+//         await logSync(deviceId, tenantId, "pull");
+//         console.log(`📥 Pulled ${rows.length} records from ${table}`);
+//       }
+//     }
+
+//     // Step 5️⃣ — Get tenant-specific sync token
+//     // ✅ UPDATED (use tenant-specific sync_token)
+//     // const currentToken = await getCurrentSyncToken(tenantId);
+//     // let newSyncToken = currentToken;
+//     let newSyncToken = newsyncToken;
+
+//     // If push or pull happened, advance token only for this tenant
+//   if(hasChangesToPush){    
+//       const { rows } = await pool.query(
+//         `
+//         INSERT INTO sync_token (tenant_id, current_token) 
+//         VALUES ($1, 1)
+//         ON CONFLICT (tenant_id)
+//         DO UPDATE SET current_token = sync_token.current_token + 1
+//         RETURNING current_token
+//         `,
+//         [tenantId]
+//       );
+//       newSyncToken = rows[0].current_token;
+//       console.log(`🔄 Tenant ${tenantId} sync token updated to ${newSyncToken}`)
+
+//   }else if(hasChangesToPull) {
+//       const { rows } = await pool.query(
+//         `
+//         INSERT INTO sync_token (tenant_id, current_token)
+//         VALUES ($1, 1)
+//         ON CONFLICT (tenant_id)
+//         DO UPDATE SET current_token = sync_token.current_token + 1
+//         RETURNING current_token
+//         `,
+//         [tenantId]
+//       );
+//       newSyncToken = rows[0].current_token;
+//       console.log(`🔄 Tenant ${tenantId} sync token updated to ${newSyncToken}`);
+//     } else {
+//       console.log(`⚪ No data changes — token remains ${newSyncToken}`);
+//     }
+
+//     // Step 6️⃣ — Send FCM notifications
+//     if (hasChangesToPush) {
+//       const fcmResult = await pool.query(
+//         `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
+//         [tenantId, deviceId]
+//       );
+
+//       const tokens = fcmResult.rows.map(r => r.fcmtoken);
+
+//       if (tokens.length > 0) {
+//         const message = { data: { type: "SYNC_TRIGGER", triggeredBy: deviceId } };
+
+//         const sendPromises = tokens.map(async (token) => {
+//           try {
+//             if (!token || token.length < 100) {
+//               console.warn(`⚠️ Skipping invalid FCM token: ${token}`);
+//               return;
+//             }
+//             await admin.messaging().send({ ...message, token });
+//           } catch (err) {
+//             if (
+//               err.code === "messaging/invalid-argument" ||
+//               err.code === "messaging/registration-token-not-registered"
+//             ) {
+//               console.warn(`❌ Removing invalid FCM token: ${token}`);
+//               await pool.query(`UPDATE devices SET fcmtoken = NULL WHERE fcmtoken = $1`, [token]);
+//             } else {
+//               console.error(`⚠️ FCM send failed for ${token}:`, err.message);
+//             }
+//           }
+//         });
+
+//         await Promise.allSettled(sendPromises);
+//         console.log(`📲 FCM notifications attempted for ${tokens.length} devices`);
+//       }
+//     }
+
+//     console.log("✅ [SYNC COMPLETED]");
+
+//     // Step 7️⃣ — Respond with new token and pulled data
+//     return res.status(200).json({
+//       sync_token: newSyncToken,
+//       changes: pullChanges
+//     });
+
+//   } catch (err) {
+//     console.error("❌ syncData error:", err);
+//     return res.status(500).json({ error: "Sync failed. Check server logs." });
+//   }
+// };
+
+// =============================================================
+// 📋 GET SYNC LOGS
+// =============================================================
+
+
 exports.syncData = async (req, res) => {
   const { deviceId, changes, tenantId, fcmtoken, devicename } = req.body;
   const sinceToken = req.body.since_token ?? req.body.sync_token;
@@ -38,141 +251,124 @@ exports.syncData = async (req, res) => {
 
   console.log("🔹 [SYNC STARTED]", { deviceId, tenantId, sinceToken });
 
-  // Step 0️⃣ — Save or update device info
-  await pool.query(`
-    INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (deviceId)
-    DO UPDATE SET
-      fcmtoken = EXCLUDED.fcmtoken,
-      tenantId = EXCLUDED.tenantId,
-      devicename = EXCLUDED.devicename,
-      updated_at = NOW()
-  `, [deviceId, fcmtoken, tenantId, devicename]);
-
-  // Step 1️⃣ — Validate tenant plan
-  const planResult = await pool.query(
-    `SELECT purchase_date FROM user_plans WHERE teanut = $1 ORDER BY purchase_date DESC LIMIT 1`,
-    [tenantId]
-  );
-
-  if (!planResult.rows.length) {
-    return res.status(403).json({ message: "No active plan found for this tenant." });
-  }
-
-  const purchaseDate = new Date(planResult.rows[0].purchase_date);
-  const expiryDate = new Date(purchaseDate);
-  expiryDate.setMonth(expiryDate.getMonth() + 1);
-
-  if (new Date() > expiryDate) {
-    return res.status(403).json({ message: "Plan expired. Please renew to continue syncing." });
-  }
-
-  const pullChanges = {};
-  let hasChangesToPush = false;
-
   try {
-    // Step 2️⃣ — Get paired devices
+    // Step 0️⃣ — Save or update device info
+    await pool.query(
+      `
+      INSERT INTO devices (deviceId, fcmtoken, tenantId, devicename)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (deviceId)
+      DO UPDATE SET
+        fcmtoken = EXCLUDED.fcmtoken,
+        tenantId = EXCLUDED.tenantId,
+        devicename = EXCLUDED.devicename,
+        updated_at = NOW()
+      `,
+      [deviceId, fcmtoken, tenantId, devicename]
+    );
+
+    // Step 1️⃣ — Validate tenant plan
+    const planResult = await pool.query(
+      `SELECT purchase_date FROM user_plans WHERE teanut = $1 ORDER BY purchase_date DESC LIMIT 1`,
+      [tenantId]
+    );
+
+    if (!planResult.rows.length) {
+      return res.status(403).json({ message: "No active plan found for this tenant." });
+    }
+
+    const purchaseDate = new Date(planResult.rows[0].purchase_date);
+    const expiryDate = new Date(purchaseDate);
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+
+    if (new Date() > expiryDate) {
+      return res.status(403).json({ message: "Plan expired. Please renew to continue syncing." });
+    }
+
+    // Step 2️⃣ — Initialize flags
+    const pullChanges = {};
+    let hasChangesToPush = false;
+    let hasChangesToPull = false;
+    let newsyncToken = null;
+
+    // Step 3️⃣ — Get paired devices
     const pairedDeviceIds = await getPairedDeviceIds(deviceId, tenantId);
     const otherPairedDevices = pairedDeviceIds.filter(id => id !== deviceId);
 
-    const { rows } = await pool.query(
-        `
-        INSERT INTO sync_token (tenant_id, current_token)
-    VALUES ($1, 1)
-    ON CONFLICT (tenant_id)
-    DO UPDATE SET current_token = sync_token.current_token + 1
-    RETURNING current_token;
-        `,
-        [tenantId]
-      );
-      const newsyncToken = rows[0].current_token;
-
-    // Step 3️⃣ — Push local changes
+    // Step 4️⃣ — Check if there are local (push) changes
     for (const table of tableList) {
       const incomingRecords = changes?.[table];
-      if (!Array.isArray(incomingRecords) || incomingRecords.length === 0) continue;
-
-      hasChangesToPush = true;
-      const updatedGlobalIds = [];
-
-      for (const record of incomingRecords) {
-        try {
-          const updated = await safeUpsertRecord(table, record, tenantId, deviceId , newsyncToken);
-          if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
-        } catch (err) {
-          console.error(`❌ Error in ${table}:`, err.message);
-        }
+      if (Array.isArray(incomingRecords) && incomingRecords.length > 0) {
+        hasChangesToPush = true;
+        console.log(`🟡 Detected ${incomingRecords.length} local changes in ${table}`);
       }
-
-      await logSync(deviceId, tenantId, "push");
-      console.log(`📤 ${updatedGlobalIds.length} records pushed to ${table}`);
     }
 
-    // Step 4️⃣ — Pull changes from other devices
-    let hasChangesToPull = false;
-
+    // Step 5️⃣ — Check if there are remote (pull) changes
     for (const table of tableListpull) {
       const rows = await getRecordsSinceFromDevices(table, sinceToken, tenantId, deviceId);
       if (rows.length > 0) {
         pullChanges[table] = rows;
         hasChangesToPull = true;
-
         await logSync(deviceId, tenantId, "pull");
         console.log(`📥 Pulled ${rows.length} records from ${table}`);
       }
     }
 
-    // Step 5️⃣ — Get tenant-specific sync token
-    // ✅ UPDATED (use tenant-specific sync_token)
-    // const currentToken = await getCurrentSyncToken(tenantId);
-    // let newSyncToken = currentToken;
-    let newSyncToken = sinceToken;
-
-    // If push or pull happened, advance token only for this tenant
-  if(hasChangesToPush){    
-      const { rows } = await pool.query(
-        `
-        INSERT INTO sync_token (tenant_id, current_token) 
-        VALUES ($1, 1)
-        ON CONFLICT (tenant_id)
-        DO UPDATE SET current_token = sync_token.current_token + 1
-        RETURNING current_token
-        `,
-        [tenantId]
-      );
-      newSyncToken = rows[0].current_token;
-      console.log(`🔄 Tenant ${tenantId} sync token updated to ${newSyncToken}`)
-
-  }else if(hasChangesToPull) {
+    // Step 6️⃣ — Increment sync token ONCE if push or pull changes detected
+    if (hasChangesToPush || hasChangesToPull) {
       const { rows } = await pool.query(
         `
         INSERT INTO sync_token (tenant_id, current_token)
         VALUES ($1, 1)
         ON CONFLICT (tenant_id)
         DO UPDATE SET current_token = sync_token.current_token + 1
-        RETURNING current_token
+        RETURNING current_token;
         `,
         [tenantId]
       );
-      newSyncToken = rows[0].current_token;
-      console.log(`🔄 Tenant ${tenantId} sync token updated to ${newSyncToken}`);
+      newsyncToken = rows[0].current_token;
+      console.log(
+        `🔄 Sync token incremented for tenant ${tenantId} — new token: ${newsyncToken} ` +
+        `(previous: ${sinceToken}) | Reason: ${hasChangesToPush && hasChangesToPull ? "push + pull" : hasChangesToPush ? "push" : "pull"}`
+      );
     } else {
-      console.log(`⚪ No data changes — token remains ${newSyncToken}`);
+      console.log("⚪ No push or pull changes detected — sync token not incremented.");
     }
 
-    // Step 6️⃣ — Send FCM notifications
+    // Step 7️⃣ — Push local changes (if any)
+    if (hasChangesToPush && newsyncToken) {
+      for (const table of tableList) {
+        const incomingRecords = changes?.[table];
+        if (!Array.isArray(incomingRecords) || incomingRecords.length === 0) continue;
+
+        const updatedGlobalIds = [];
+
+        for (const record of incomingRecords) {
+          try {
+            const updated = await safeUpsertRecord(table, record, tenantId, deviceId, newsyncToken);
+            if (updated?.global_id) updatedGlobalIds.push(updated.global_id);
+          } catch (err) {
+            console.error(`❌ Error upserting into ${table}:`, err.message);
+          }
+        }
+
+        await logSync(deviceId, tenantId, "push");
+        console.log(`📤 Pushed ${updatedGlobalIds.length} records to ${table} using token ${newsyncToken}`);
+      }
+    }
+
+    // Step 8️⃣ — Send FCM notifications if push occurred
     if (hasChangesToPush) {
       const fcmResult = await pool.query(
         `SELECT fcmtoken FROM devices WHERE tenantId = $1 AND deviceId != $2 AND fcmtoken IS NOT NULL`,
         [tenantId, deviceId]
       );
 
-      const tokens = fcmResult.rows.map(r => r.fcmtoken);
+      const tokens = fcmResult.rows.map(r => r.fcmtoken).filter(Boolean);
 
       if (tokens.length > 0) {
         const message = { data: { type: "SYNC_TRIGGER", triggeredBy: deviceId } };
-
         const sendPromises = tokens.map(async (token) => {
           try {
             if (!token || token.length < 100) {
@@ -194,16 +390,26 @@ exports.syncData = async (req, res) => {
         });
 
         await Promise.allSettled(sendPromises);
-        console.log(`📲 FCM notifications attempted for ${tokens.length} devices`);
+        console.log(`📲 FCM notifications sent to ${tokens.length} device(s)`);
+      } else {
+        console.log("ℹ️ No paired devices with valid FCM tokens found.");
       }
     }
 
     console.log("✅ [SYNC COMPLETED]");
+    console.log(`📘 Final Sync Summary:
+        Tenant: ${tenantId}
+        Device: ${deviceId}
+        Old Token: ${sinceToken}
+        New Token: ${newsyncToken ?? sinceToken}
+        Changes Pushed: ${hasChangesToPush ? "✅ Yes" : "❌ No"}
+        Changes Pulled: ${hasChangesToPull ? "✅ Yes" : "❌ No"}
+    `);
 
-    // Step 7️⃣ — Respond with new token and pulled data
+    // Step 9️⃣ — Respond to client
     return res.status(200).json({
-      sync_token: newSyncToken,
-      changes: pullChanges
+      sync_token: newsyncToken ?? sinceToken,
+      changes: pullChanges,
     });
 
   } catch (err) {
@@ -212,9 +418,8 @@ exports.syncData = async (req, res) => {
   }
 };
 
-// =============================================================
-// 📋 GET SYNC LOGS
-// =============================================================
+
+
 exports.getSyncLogs = async (req, res) => {
   const { deviceId, tenantId, direction, startDate, endDate } = req.query;
 
