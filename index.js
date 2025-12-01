@@ -5,6 +5,7 @@ const syncRoutes = require('./routes/syncRoute');
 const transactionRoutes = require('./routes/transactionRoutes');
 const pairingRoutes = require('./routes/pairingRoutes');
 const planRoutes = require('./routes/planroute');
+const companyImageRoutes = require('./routes/companyImageRoutes');
 const path = require("path");
 const fs = require("fs");
 
@@ -43,6 +44,9 @@ app.use("/receipts", express.static(path.join(__dirname, "receipts"))); // Serve
 app.use("/api", receiptRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api", companyRoutes);
+app.use('/uploads', express.static('uploads'));
+app.use("/api/company", companyImageRoutes );
+
 
 
 
