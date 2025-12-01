@@ -231,7 +231,7 @@ async function generatePDF(data, outputPath) {
     drawBase64Image(doc, data.companyLogo, 50, 50, 50, 50);
 
     doc.fillColor("#000000").font("Helvetica").fontSize(10);
-    doc.text(`  Kimura Shukokai`, 110, 50);
+    doc.text(` Company: ${data.company}`, 110, 50);
     doc.text(`  Invoice No : ${data.uuid || "INV-" + Date.now()}`, 110, 65);
     doc.text(`  Date : ${data.timestamp}`, 110, 80);
 
