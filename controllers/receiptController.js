@@ -276,8 +276,8 @@ async function generatePDF(data, outputPath) {
     const footerY = 720;
     doc.font("Helvetica").fontSize(10).fillColor("#000000").text("Thank you", 50, footerY);
 
-    doc.rect(500, footerY - 10, 45, 20).fillColor("#f1c40f").fill();
-    doc.fillColor("#000000").fontSize(8).text("strokhor", 505, footerY - 5);
+    // doc.rect(500, footerY - 10, 45, 20).fillColor("#f1c40f").fill();
+    // doc.fillColor("#000000").fontSize(8).text("strokhor", 505, footerY - 5);
 
     // === SUMMARY ===
     const discountValue = data.discount?.percent
